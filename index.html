@@ -1,0 +1,1598 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador Juan Pastel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Onest:wght@400;500;600&family=Yellowtail&display=swap" rel="stylesheet">
+<style>
+/* Layout: la escena 3D del kiosco es la protagonista (izquierda); el panel "Arma la franja" queda a la derecha;
+   debajo, una columna de lectura con resultados, gráficas, fórmulas y la tabla de clientes. */
+:root{
+  --bg:#E8ECEE;        /* acero cepillado claro */
+  --surface:#F6F8F8;
+  --raised:#FFFFFF;
+  --ink:#16212B;       /* azul noche del uniforme */
+  --muted:#53606B;
+  --line:#C9D1D6;
+  --awning:#C21F33;    /* rojo del toldo */
+  --awning-ink:#FFFFFF;
+  --stripe:#FFFFFF;
+  --pastry:#C9831B;    /* dorado de pastel: clientes en fila */
+  --pastry-soft:#F3DDB4;
+  --leaf:#1F8659;      /* verde: siendo atendido / libre */
+  --alert:#B42318;
+  --shadow:0 1px 2px rgba(22,33,43,.06),0 8px 24px rgba(22,33,43,.08);
+  --f-display:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;
+  --f-body:"Onest","Segoe UI",system-ui,sans-serif;
+  --f-script:"Yellowtail","Brush Script MT","Segoe Script",cursive;
+  --f-code:ui-monospace,"Cascadia Code",Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F151B;--surface:#151D25;--raised:#1B2530;--ink:#E5EAED;--muted:#98A4AE;--line:#2B3743;
+  --awning:#E2474F;--awning-ink:#FFFFFF;--stripe:#D9DFE3;--pastry:#E9A644;--pastry-soft:#4A3A1E;--leaf:#46C186;--alert:#FF8A80;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.3);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F151B;--surface:#151D25;--raised:#1B2530;--ink:#E5EAED;--muted:#98A4AE;--line:#2B3743;
+  --awning:#E2474F;--awning-ink:#FFFFFF;--stripe:#D9DFE3;--pastry:#E9A644;--pastry-soft:#4A3A1E;--leaf:#46C186;--alert:#FF8A80;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.3);color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.55 var(--f-body);font-variant-numeric:tabular-nums;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+.toldo{height:10px;margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px))) calc(-1 * max(16px,env(safe-area-inset-right,0px)));
+  background:repeating-linear-gradient(90deg,var(--awning) 0 28px,var(--stripe) 28px 56px)}
+main{max-width:1320px;margin:0 auto}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;text-wrap:balance;margin:0}
+p{margin:0}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--awning);outline-offset:2px}
+
+/* Cabecera */
+.cab{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 32px;padding-block:22px 18px}
+.marca{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.marca .script{font-family:var(--f-script);font-size:44px;line-height:1;color:var(--awning)}
+.marca h1{font-size:clamp(22px,2.6vw,30px);letter-spacing:-.01em}
+.cab .sub{color:var(--muted);max-width:62ch;margin-top:6px}
+.cab .modelo{display:flex;gap:8px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:14px;color:var(--muted)}
+.pill b{color:var(--ink);font-weight:600}
+
+/* Zona principal */
+.app{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:20px;align-items:start}
+.escena-wrap{min-width:0;display:flex;flex-direction:column;gap:10px}
+.escena{position:relative;height:clamp(380px,66vh,680px);border-radius:16px;overflow:hidden;background:#cfd8de;box-shadow:var(--shadow)}
+.escena canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.escena canvas:active{cursor:grabbing}
+.hud{position:absolute;z-index:2;border-radius:12px;background:color-mix(in srgb,var(--raised) 86%,transparent);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid color-mix(in srgb,var(--line) 70%,transparent);color:var(--ink)}
+.hud-reloj{left:12px;top:12px;padding:8px 14px 9px;display:flex;flex-direction:column;line-height:1.2}
+.hud-reloj .fr{font-size:13px;color:var(--muted)}
+.hud-reloj strong{font-family:var(--f-display);font-size:30px;letter-spacing:-.01em;line-height:1.05}
+.hud-reloj .mn{font-size:13px;color:var(--muted)}
+.hud-chips{left:12px;bottom:12px;display:flex;gap:4px;padding:5px;flex-wrap:wrap;max-width:calc(100% - 24px)}
+.chip{display:flex;align-items:center;gap:7px;padding:4px 10px;border-radius:8px;font-size:14px;white-space:nowrap}
+.chip b{font-family:var(--f-display);font-size:18px;font-weight:700}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--muted)}
+.dot.fila{background:var(--pastry)}.dot.at{background:var(--leaf)}.dot.ok{background:var(--leaf)}.dot.off{background:var(--line)}
+.hud-vistas{right:12px;top:12px;display:flex;padding:4px;gap:2px}
+.hud-vistas button{border:0;background:transparent;padding:6px 10px;border-radius:8px;font-size:14px;cursor:pointer;color:var(--muted)}
+.hud-vistas button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.hud-vistas button:hover{color:var(--ink)}
+.hud-vistas button[aria-pressed="true"]:hover{color:var(--bg)}
+.tip{position:absolute;z-index:3;pointer-events:none;background:var(--raised);color:var(--ink);border:1px solid var(--line);border-radius:10px;
+  padding:8px 11px;font-size:13.5px;line-height:1.45;box-shadow:var(--shadow);max-width:240px}
+.tip strong{font-family:var(--f-display);font-size:15px;display:block}
+.sin3d{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted);background:var(--surface)}
+
+.repro{display:flex;align-items:center;gap:12px;padding:8px 10px 8px 8px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.btn-play{width:40px;height:40px;flex:none;border-radius:50%;border:0;background:var(--ink);color:var(--bg);display:grid;place-items:center;cursor:pointer}
+.btn-play svg{width:18px;height:18px}
+.repro .t{font-size:14px;color:var(--muted);white-space:nowrap;min-width:9.5ch;text-align:right}
+.repro select{border:1px solid var(--line);background:var(--raised);border-radius:8px;padding:5px 8px;font-size:14px}
+.leyenda{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;color:var(--muted);padding-inline:4px}
+.leyenda span{display:inline-flex;align-items:center;gap:7px}
+.leyenda .aro{width:14px;height:14px;border-radius:50%;border:3px solid var(--muted)}
+.aro.fila{border-color:var(--pastry)}.aro.at{border-color:var(--leaf)}
+
+/* Rangos */
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;margin:0;--p:50%}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--awning) var(--p),var(--line) var(--p))}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--awning) var(--p),var(--line) var(--p))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--raised);border:3px solid var(--awning);margin-top:-7px;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--raised);border:3px solid var(--awning)}
+.repro input[type=range]{flex:1;min-width:60px}
+
+/* Panel */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 18px 20px;display:flex;flex-direction:column;gap:18px}
+.panel-head h2{font-size:22px}
+.panel-head p{color:var(--muted);font-size:14.5px;margin-top:2px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend,.lbl{font-size:14px;font-weight:600;color:var(--ink);padding:0}
+.escenarios{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.escenarios legend{margin-bottom:8px}
+.esc{position:relative;display:flex;flex-direction:column;gap:2px;padding:10px 10px 11px;border:1.5px solid var(--line);border-radius:12px;background:var(--raised);cursor:pointer;min-width:0;transition:border-color .15s,background .15s}
+.esc input{position:absolute;opacity:0;pointer-events:none}
+.esc svg{width:26px;height:26px;margin-bottom:4px;color:var(--muted)}
+.esc b{font-size:14.5px;line-height:1.2}
+.esc span{font-size:12.5px;color:var(--muted);line-height:1.3}
+.esc .d{font-family:var(--f-display);font-weight:700;color:var(--ink);font-size:14px;margin-top:4px}
+.esc:has(input:checked){border-color:var(--awning);background:color-mix(in srgb,var(--awning) 7%,var(--raised))}
+.esc:has(input:checked) svg{color:var(--awning)}
+.esc:has(input:focus-visible){outline:2px solid var(--awning);outline-offset:2px}
+.campo{display:flex;flex-direction:column;gap:2px}
+.fila-lbl{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.num{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:var(--muted);white-space:nowrap}
+.num input{width:88px;text-align:right;font-family:var(--f-display);font-weight:700;font-size:17px;color:var(--ink);background:var(--raised);
+  border:1px solid var(--line);border-radius:8px;padding:3px 8px}
+.ayuda{font-size:13.5px;color:var(--muted)}
+.doble{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px;padding-top:8px;border-top:1px dashed var(--line)}
+.doble .lbl{font-weight:500;font-size:13.5px;color:var(--muted)}
+
+.medidor{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:center;background:var(--raised);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.medidor svg{width:150px;height:auto;display:block}
+.medidor .arco-fondo{stroke:var(--line)}
+.medidor .aguja{stroke:var(--ink)}
+.medidor .centro{fill:var(--ink)}
+.medidor .tick{fill:var(--muted);font-size:10px;font-family:var(--f-body)}
+.rho-num{font-family:var(--f-display);font-weight:700;font-size:30px;line-height:1.05}
+.estado-rho{font-weight:600;font-size:15px;line-height:1.3}
+.medidor p{font-size:13.5px;color:var(--muted);margin-top:3px}
+.pred{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pred div{display:flex;flex-direction:column;padding:8px 10px;border-radius:10px;background:var(--raised);border:1px solid var(--line);min-width:0}
+.pred span{font-size:12.5px;color:var(--muted);line-height:1.25}
+.pred b{font-family:var(--f-display);font-size:20px;line-height:1.2}
+.pred-t{font-size:14px;font-weight:600}
+details.avz{border-top:1px solid var(--line);padding-top:12px}
+details.avz summary{cursor:pointer;font-weight:600;font-size:14.5px;list-style:none;display:flex;align-items:center;gap:8px}
+details.avz summary::-webkit-details-marker{display:none}
+details.avz summary::before{content:"";width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+details.avz[open] summary::before{transform:rotate(45deg)}
+.avz-grid{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.semilla{display:flex;gap:8px;align-items:center}
+.semilla input{width:100px}
+.btn-sec{border:1px solid var(--line);background:var(--raised);border-radius:8px;padding:5px 10px;font-size:13.5px;cursor:pointer}
+.btn-sec:hover{border-color:var(--muted)}
+input[type=time]{border:1px solid var(--line);background:var(--raised);border-radius:8px;padding:3px 8px;font-size:15px}
+.btn-sim{border:0;border-radius:12px;background:var(--awning);color:var(--awning-ink);font-weight:600;font-size:16px;padding:12px 16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:10px}
+.btn-sim:hover{filter:brightness(1.06)}
+.btn-sim:disabled{opacity:.45;cursor:not-allowed;filter:none}
+.btn-sim.pendiente{box-shadow:0 0 0 4px color-mix(in srgb,var(--awning) 25%,transparent)}
+.nota-sim{font-size:13.5px;color:var(--muted);min-height:1.4em;margin-top:-8px}
+
+/* Secciones de lectura */
+.bloque{margin-top:48px;display:flex;flex-direction:column;gap:16px}
+.bloque > header{display:flex;flex-direction:column;gap:4px;max-width:75ch}
+.bloque h2{font-size:clamp(22px,2.4vw,28px)}
+.bloque > header p{color:var(--muted)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-size:13.5px;font-weight:600;color:var(--muted);background:var(--raised)}
+tbody tr:last-child td{border-bottom:0}
+.comp td:first-child{white-space:normal;min-width:190px}
+.comp td:first-child small{display:block;color:var(--muted);font-size:13px}
+.comp .sim{font-weight:600}
+.comp .pm{color:var(--muted);font-weight:400;font-size:13px}
+.comp .sym{font-family:var(--f-display);font-weight:700;margin-right:6px}
+.hallazgos{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.hallazgos p{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:15px}
+.hallazgos p b{display:block;font-family:var(--f-display);font-size:16.5px;margin-bottom:4px}
+
+.graficas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 16px 12px;min-width:0;display:flex;flex-direction:column;gap:8px}
+figure.ancho{grid-column:1/-1}
+figure h3{font-size:18px}
+figure figcaption p{color:var(--muted);font-size:14px}
+figure svg{width:100%;height:auto;display:block;overflow:visible}
+.g-eje{stroke:var(--line)}
+.g-txt{fill:var(--muted);font-size:11px;font-family:var(--f-body)}
+.g-txt-ink{fill:var(--ink);font-size:11.5px;font-family:var(--f-body);font-weight:600}
+.g-fila{fill:color-mix(in srgb,var(--pastry) 30%,transparent);stroke:var(--pastry);stroke-width:1.6}
+.g-campo{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:4 3}
+.g-teo{stroke:var(--ink);stroke-width:1.4;stroke-dasharray:6 4}
+.g-cursor{stroke:var(--awning);stroke-width:2}
+.g-bar-sim{fill:var(--pastry)}
+.g-bar-teo{fill:none;stroke:var(--ink);stroke-width:1.4}
+.g-pto{fill:var(--awning)}
+.g-linea{fill:none;stroke:var(--pastry);stroke-width:2.2}
+.g-pto-sim{fill:var(--pastry);stroke:var(--surface);stroke-width:2}
+.g-ley{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13.5px;color:var(--muted)}
+.g-ley span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:16px;height:10px;border-radius:2px;display:inline-block}
+.sw.fila{background:color-mix(in srgb,var(--pastry) 55%,transparent);border:1.5px solid var(--pastry)}
+.sw.teo{border-top:2px dashed var(--ink);height:0;border-radius:0}
+.sw.campo{border-top:2px dashed var(--muted);height:0;border-radius:0}
+.sw.box{border:1.5px solid var(--ink);background:transparent}
+.sw.pt{width:10px;height:10px;border-radius:50%;background:var(--awning)}
+
+.formulas{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.f{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.f .nom{font-size:14px;color:var(--muted)}
+.f .eq{font-family:var(--f-display);font-size:22px;font-weight:500;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.f .sus{font-size:15px;color:var(--muted);display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.f .res{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--ink)}
+.frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;line-height:1.15}
+.frac > span:first-child{border-bottom:1.5px solid currentColor;padding:0 4px 1px}
+.frac > span:last-child{padding:1px 4px 0}
+.nota{font-size:14.5px;color:var(--muted);max-width:80ch}
+
+.pasos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:20px;align-items:start}
+.pasos ol{margin:0;padding:0;list-style:none;counter-reset:p;display:flex;flex-direction:column;gap:14px}
+.pasos li{counter-increment:p;display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;max-width:62ch}
+.pasos li::before{content:counter(p);width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:15px}
+.pasos li b{display:block}
+.pasos li span{color:var(--muted);font-size:15px}
+pre{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;overflow-x:auto;font:13.5px/1.6 var(--f-code);color:var(--ink);min-width:0}
+pre .c{color:var(--muted)}
+
+.tabla-cl{max-height:460px;overflow:auto}
+.tabla-cl thead th{position:sticky;top:0;z-index:1}
+.tabla-cl tr.fila td{background:color-mix(in srgb,var(--pastry) 16%,transparent)}
+.tabla-cl tr.at td{background:color-mix(in srgb,var(--leaf) 14%,transparent)}
+.tabla-cl td.emp{font-weight:600}
+.pie{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+
+@media (max-width:1040px){.app{grid-template-columns:1fr}.escena{height:clamp(360px,58vh,560px)}}
+@media (max-width:600px){.hud-vistas{right:auto;left:12px;top:92px}}
+@media (max-width:760px){.graficas,.pasos{grid-template-columns:1fr}.marca .script{font-size:36px}}
+@media (max-width:440px){.escenarios{grid-template-columns:1fr}.esc{flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px 8px}.esc svg{margin:0}
+  .medidor{grid-template-columns:1fr;justify-items:center;text-align:center}.hud-reloj strong{font-size:24px}.hud-vistas button{padding:5px 7px;font-size:13px}
+  .chip{font-size:13px;padding:3px 7px}.chip b{font-size:16px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="toldo" aria-hidden="true"></div>
+<main>
+  <header class="cab">
+    <div>
+      <div class="marca"><span class="script">Juan Pastel</span><h1>Simulación de la fila</h1></div>
+      <p class="sub">Kiosco de pasteles y jugos frente a la UDES, Cúcuta. Dos empleados atienden una sola fila en orden de llegada. La simulación usa los datos que se tomaron en el local.</p>
+    </div>
+    <div class="modelo">
+      <span class="pill">Modelo <b>M/M/2</b></span>
+      <span class="pill">Empleados <b>2</b></span>
+      <span class="pill">Fila <b>única, FIFO</b></span>
+    </div>
+  </header>
+
+  <div class="app">
+    <section class="escena-wrap" aria-label="Escena 3D del kiosco">
+      <div id="escena" class="escena">
+        <div class="hud hud-reloj" aria-live="off">
+          <span class="fr" id="hFranja">Hora pico</span>
+          <strong id="hReloj">7:00 a. m.</strong>
+          <span class="mn" id="hMin">minuto 0 de 60</span>
+        </div>
+        <div class="hud hud-vistas" role="group" aria-label="Vista de cámara">
+          <button type="button" data-vista="general" aria-pressed="true">General</button>
+          <button type="button" data-vista="mostrador" aria-pressed="false">Mostrador</button>
+          <button type="button" data-vista="fila" aria-pressed="false">Fila</button>
+          <button type="button" data-vista="planta" aria-pressed="false">Planta</button>
+        </div>
+        <div class="hud hud-chips">
+          <div class="chip"><span class="dot fila"></span>En fila <b id="cFila">0</b></div>
+          <div class="chip"><span class="dot off" id="dE1"></span>E1 <b id="cE1">libre</b></div>
+          <div class="chip"><span class="dot off" id="dE2"></span>E2 <b id="cE2">libre</b></div>
+          <div class="chip">Atendidos <b id="cAt">0</b></div>
+        </div>
+        <div id="tip" class="tip" hidden></div>
+        <div id="sin3d" class="sin3d" hidden>Este navegador no pudo iniciar la escena 3D (WebGL). La simulación, las gráficas y las tablas siguen funcionando.</div>
+      </div>
+      <div class="repro">
+        <button type="button" class="btn-play" id="play" aria-label="Pausar">
+          <svg id="icoPausa" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg>
+          <svg id="icoPlay" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" hidden><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.4-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>
+        </button>
+        <input type="range" id="barra" min="0" max="60" step="0.01" value="0" aria-label="Minuto de la franja">
+        <span class="t" id="tTxt">0.0 / 60 min</span>
+        <select id="vel" aria-label="Velocidad">
+          <option value="0.25">×15</option>
+          <option value="0.5" selected>×30</option>
+          <option value="1">×60</option>
+          <option value="2">×120</option>
+          <option value="5">×300</option>
+          <option value="10">×600</option>
+        </select>
+      </div>
+      <div class="leyenda">
+        <span><i class="aro fila"></i>Esperando en la fila</span>
+        <span><i class="aro at"></i>Siendo atendido</span>
+        <span><i class="aro"></i>Ya salió del sistema (se va o se sienta)</span>
+        <span>Pasa el cursor sobre un cliente para ver sus tiempos.</span>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Datos de la simulación">
+      <div class="panel-head">
+        <h2>Arma la franja</h2>
+        <p>Parte de tu trabajo de campo o escribe tus propios valores.</p>
+      </div>
+
+      <fieldset class="escenarios">
+        <legend>Escenario</legend>
+        <label class="esc"><input type="radio" name="esc" value="pico" checked>
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 24h24M9 24a7 7 0 0 1 14 0M16 8v4M7 13l2.5 2.5M25 13l-2.5 2.5"/></svg>
+          <b>Hora pico</b><span>7:00–8:00 a.&nbsp;m.</span><span class="d">λ = 35/h</span></label>
+        <label class="esc"><input type="radio" name="esc" value="valle">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 24h24M10 24a6 6 0 0 1 12 0M7 28h18"/><path d="M22 7a6 6 0 1 0 3 9 5 5 0 0 1-3-9z"/></svg>
+          <b>Hora valle</b><span>4:40–5:20 p.&nbsp;m.</span><span class="d">λ = 22.5/h</span></label>
+        <label class="esc"><input type="radio" name="esc" value="libre">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 9h14M25 9h2M5 16h4M15 16h12M5 23h10M21 23h6"/><circle cx="22" cy="9" r="3"/><circle cx="12" cy="16" r="3"/><circle cx="18" cy="23" r="3"/></svg>
+          <b>Tus valores</b><span>Ajusta λ y μ</span><span class="d" id="escLibreDato">—</span></label>
+      </fieldset>
+
+      <div class="campo">
+        <div class="fila-lbl"><label class="lbl" for="lam">Llegadas (λ)</label>
+          <span class="num"><input id="lamN" type="number" min="1" max="120" step="0.5" value="35" aria-label="λ en clientes por hora"> clientes/h</span></div>
+        <input type="range" id="lam" min="5" max="80" step="0.5" value="35">
+        <p class="ayuda" id="lamAyuda">Llega un cliente cada 1.7 min en promedio.</p>
+      </div>
+
+      <div class="campo">
+        <div class="fila-lbl"><label class="lbl" for="mu">Atención por empleado (μ)</label>
+          <span class="num"><input id="muN" type="number" min="1" max="120" step="0.01" value="20.69" aria-label="μ en clientes por hora"> clientes/h</span></div>
+        <input type="range" id="mu" min="6" max="60" step="0.01" value="20.69">
+        <div class="doble"><label class="lbl" for="tat">Tiempo medio de atención (1/μ)</label>
+          <span class="num"><input id="tat" type="number" min="1" max="10" step="0.1" value="2.9"> min</span></div>
+      </div>
+
+      <div class="medidor">
+        <svg viewBox="0 0 200 118" role="img" aria-labelledby="rhoTxt">
+          <path class="arco-fondo" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke-width="14" stroke-linecap="round" pathLength="100"/>
+          <path id="arcoVal" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke-width="14" stroke-linecap="round" pathLength="100" stroke-dasharray="85 100" style="transition:stroke-dasharray .3s,stroke .3s"/>
+          <g id="aguja" style="transition:transform .3s;transform-origin:100px 100px"><line class="aguja" x1="100" y1="100" x2="38" y2="100" stroke-width="3" stroke-linecap="round"/></g>
+          <circle class="centro" cx="100" cy="100" r="6"/>
+          <text class="tick" x="14" y="116">0</text><text class="tick" x="180" y="116">1</text>
+        </svg>
+        <div>
+          <div class="rho-num" id="rhoVal">84.6%</div>
+          <div class="estado-rho" id="rhoTxt">Estable, pero muy congestionado</div>
+          <p id="rhoAyuda">ρ = λ / (2μ). Es la fracción del tiempo que los empleados pasan ocupados.</p>
+        </div>
+      </div>
+
+      <div>
+        <div class="pred-t">La teoría M/M/2 predice</div>
+        <div class="pred" style="margin-top:8px">
+          <div><span>Espera en fila</span><b id="pWq">7.3 min</b></div>
+          <div><span>Personas en fila</span><b id="pLq">4.25</b></div>
+          <div><span>Les toca esperar</span><b id="pPw">78%</b></div>
+        </div>
+      </div>
+
+      <details class="avz">
+        <summary>Duración, réplicas y semilla</summary>
+        <div class="avz-grid">
+          <div class="campo">
+            <div class="fila-lbl"><label class="lbl" for="dur">Duración de la franja</label>
+              <span class="num"><input id="durN" type="number" min="10" max="960" step="5" value="60" aria-label="Duración en minutos"> min</span></div>
+            <input type="range" id="dur" min="10" max="480" step="5" value="60">
+          </div>
+          <div class="fila-lbl"><label class="lbl" for="hIni">Hora de inicio</label><input type="time" id="hIni" value="07:00"></div>
+          <div class="campo">
+            <div class="fila-lbl"><label class="lbl" for="rep">Réplicas</label>
+              <span class="num"><input id="repN" type="number" min="1" max="100" step="1" value="20" aria-label="Número de réplicas"> corridas</span></div>
+            <input type="range" id="rep" min="1" max="60" step="1" value="20">
+            <p class="ayuda">Cada réplica simula la misma franja con otros números al azar. Los resultados se promedian.</p>
+          </div>
+          <div class="fila-lbl"><label class="lbl" for="sem">Semilla</label>
+            <span class="semilla"><span class="num"><input id="sem" type="number" min="1" step="1" value="2026"></span><button type="button" class="btn-sec" id="otraSem">Otra</button></span></div>
+        </div>
+      </details>
+
+      <button type="button" class="btn-sim" id="simular">Simular franja</button>
+      <p class="nota-sim" id="notaSim" role="status"></p>
+    </aside>
+  </div>
+
+  <section class="bloque" id="resultados">
+    <header>
+      <h2>Simulación frente a la teoría y al campo</h2>
+      <p id="resCorrida">20 réplicas de 60 min.</p>
+    </header>
+    <div class="tw">
+      <table class="comp">
+        <thead><tr><th>Medida</th><th>Simulación</th><th>Teoría M/M/2</th><th id="thCampo">Campo</th></tr></thead>
+        <tbody id="tbComp"></tbody>
+      </table>
+    </div>
+    <div class="hallazgos" id="hallazgos"></div>
+  </section>
+
+  <section class="bloque">
+    <div class="graficas">
+      <figure>
+        <figcaption><h3>La fila durante la franja</h3><p>Réplica 1, la misma que se ve en 3D. La línea roja sigue la reproducción.</p></figcaption>
+        <svg id="gFila" viewBox="0 0 640 240" role="img" aria-label="Personas en fila a lo largo del tiempo"></svg>
+        <div class="g-ley" id="leyFila"></div>
+      </figure>
+      <figure>
+        <figcaption><h3>¿Cuántos hay en el local?</h3><p>Probabilidad de que haya n clientes (Pn): fracción del tiempo con n personas.</p></figcaption>
+        <svg id="gPn" viewBox="0 0 640 240" role="img" aria-label="Distribución de clientes en el sistema"></svg>
+        <div class="g-ley" id="leyPn"></div>
+      </figure>
+      <figure class="ancho">
+        <figcaption><h3>¿Por qué la simulación no da igual a la teoría?</h3><p id="convTxt">La teoría describe el sistema a largo plazo. Aquí se simulan franjas cada vez más largas con los mismos λ y μ: la espera promedio se acerca a la teórica.</p></figcaption>
+        <svg id="gConv" viewBox="0 0 900 250" role="img" aria-label="Espera en fila según la duración simulada"></svg>
+        <div class="g-ley" id="leyConv"></div>
+      </figure>
+    </div>
+  </section>
+
+  <section class="bloque">
+    <header>
+      <h2>Las fórmulas con tus números</h2>
+      <p>Son las fórmulas de M/M/c con c = 2, simplificadas. Se recalculan al mover λ o μ.</p>
+    </header>
+    <div class="formulas" id="formulas"></div>
+    <p class="nota">Forma general de P0 para M/M/c: P0 = [ Σ<sub>n=0..c−1</sub> rⁿ/n! + r<sup>c</sup>/(c!·(1−ρ)) ]⁻¹ con r = λ/μ. Con c = 2 queda (1−ρ)/(1+ρ). Todas exigen ρ &lt; 1, es decir λ &lt; 2μ.</p>
+  </section>
+
+  <section class="bloque">
+    <header>
+      <h2>Cómo funciona la simulación</h2>
+      <p>Primero se simula toda la franja en un instante; luego la escena 3D reproduce el resultado minuto a minuto.</p>
+    </header>
+    <div class="pasos">
+      <ol>
+        <li><div><b>Genera las llegadas</b><span>El tiempo entre un cliente y el siguiente es exponencial: −ln(1 − U)/λ, donde U es un número al azar entre 0 y 1. Así las llegadas forman un proceso de Poisson.</span></div></li>
+        <li><div><b>Elige empleado</b><span>Si E1 está libre lo atiende E1; si no, E2. Si los dos están ocupados, el cliente espera en la fila única y pasa con el primero que se desocupe.</span></div></li>
+        <li><div><b>Calcula los tiempos</b><span>Inicio = el mayor entre su llegada y la hora en que se libera el empleado. Fin = inicio + tiempo de atención exponencial con tasa μ.</span></div></li>
+        <li><div><b>Mide</b><span>Wq = inicio − llegada y W = fin − llegada. Lq, L y Pn salen de cuánto tiempo hubo n personas en el local, dividido entre la duración de la franja.</span></div></li>
+        <li><div><b>Repite y promedia</b><span>Se corren varias réplicas con semillas distintas. La misma semilla siempre da el mismo resultado, así se puede repetir en la sustentación.</span></div></li>
+      </ol>
+<pre><code><span class="c">// Simula una franja: devuelve llegada, empleado, inicio y fin de cada cliente</span>
+function simularFranja(lamH, muH, dur, semilla) {
+  const azar = crearAleatorio(semilla);
+  const exponencial = tasa =&gt; -Math.log(1 - azar()) / tasa;
+  const lam = lamH / 60, mu = muH / 60;   <span class="c">// pasar a clientes por minuto</span>
+  const libre = [0, 0];                   <span class="c">// minuto en que se libera E1 y E2</span>
+  const clientes = [];
+  let t = 0;
+  while (true) {
+    t += exponencial(lam);                <span class="c">// llega el siguiente cliente</span>
+    if (t &gt; dur) break;                   <span class="c">// se cerró la franja</span>
+    let e;
+    if (libre[0] &lt;= t) e = 0;             <span class="c">// E1 libre</span>
+    else if (libre[1] &lt;= t) e = 1;        <span class="c">// E2 libre</span>
+    else e = libre[0] &lt;= libre[1] ? 0 : 1; <span class="c">// espera al primero que se libere</span>
+    const inicio = Math.max(t, libre[e]);
+    const fin = inicio + exponencial(mu);
+    libre[e] = fin;
+    clientes.push({ id: clientes.length + 1, llegada: t, empleado: e, inicio, fin });
+  }
+  return clientes;
+}</code></pre>
+    </div>
+  </section>
+
+  <section class="bloque">
+    <header>
+      <h2>Clientes de la réplica 1</h2>
+      <p id="clTxt">Mismas columnas que la tabla de observación de campo. Las filas se resaltan mientras el cliente está en la fila (dorado) o siendo atendido (verde).</p>
+    </header>
+    <div class="tw tabla-cl">
+      <table>
+        <thead><tr><th>#</th><th>Llegada</th><th>Empleado</th><th>Inicio atención</th><th>Fin</th><th>Atención (min)</th><th>Espera Wq (min)</th><th>Total W (min)</th><th>Después</th></tr></thead>
+        <tbody id="tbCl"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="pie">Proyecto de Modelos Matemáticos, UDES. Datos de campo tomados en Juan Pastel: franja pico de 7:00 a 8:00 a. m. (35 clientes) y franja valle de 4:40 a 5:20 p. m. (15 clientes). Las mesas y la salida de los clientes son solo visuales: el cliente sale del sistema cuando termina su atención.</p>
+</main>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = id => document.getElementById(id);
+const fmt = (x, d = 2) => Number.isFinite(x) ? x.toFixed(d) : '—';
+const pad = n => String(n).padStart(2, '0');
+function reloj(minDia, seg = false) {
+  const totS = Math.round(minDia * 60);
+  const h = Math.floor(totS / 3600) % 24, m = Math.floor(totS / 60) % 60, s = totS % 60;
+  return `${h % 12 || 12}:${pad(m)}${seg ? ':' + pad(s) : ''} ${h < 12 ? 'a. m.' : 'p. m.'}`;
+}
+
+/* =====================================================================
+   1. DATOS DE CAMPO (tablas del documento)
+   ===================================================================== */
+// Franja pico, minutos contados desde las 7:00: [llegada, empleado, inicio, fin]
+const CAMPO_PICO = [
+  [1,0,1,3],[1,1,1,5],[2,0,3,5],[3,0,5,10],[4,1,5,8],[5,1,8,10],[6,0,10,15],[7,1,10,12],[8,1,12,14],[10,1,14,18],
+  [11,0,15,17],[13,0,17,19],[14,1,18,23],[15,0,19,21],[17,0,21,23],[18,0,23,26],[20,1,23,27],[22,0,26,28],[24,1,27,29],[25,0,28,33],
+  [27,1,29,31],[29,1,31,33],[31,0,33,36],[33,1,33,36],[35,0,36,38],[37,1,37,42],[39,0,39,42],[42,0,42,44],[44,1,44,46],[46,0,46,50],
+  [48,1,48,51],[50,0,50,52],[52,1,52,54],[54,0,54,57],[56,1,56,59]
+].map(([llegada, empleado, inicio, fin], i) => ({ id: i + 1, llegada, empleado, inicio, fin }));
+// Franja valle, minutos desde las 4:40 p. m.: [llegada, salida] (no se anotó el inicio de la atención)
+const CAMPO_VALLE = [[2,7],[3,6],[4,11],[5,10],[9,11],[11,13],[12,15],[18,22],[23,24],[23,25],[27,29],[29,30],[29,31],[31,33],[32,35]];
+
+const ESCENARIOS = {
+  pico:  { nombre: 'Hora pico',  inicio: 7 * 60,       dur: 60, lam: 35,   tat: 2.9 },
+  valle: { nombre: 'Hora valle', inicio: 16 * 60 + 40, dur: 40, lam: 22.5, tat: 2.9 },
+};
+
+/* =====================================================================
+   2. TEORÍA M/M/2   (ρ = λ / 2μ)
+   ===================================================================== */
+function teoria(lamH, muH) {
+  const rho = lamH / (2 * muH);
+  if (!(rho < 1)) return null;                    // sin estabilidad no hay estado estable
+  const P0 = (1 - rho) / (1 + rho);
+  const Lq = 2 * rho ** 3 / (1 - rho ** 2);
+  const Wq = Lq / lamH * 60;                      // en minutos
+  const W = Wq + 60 / muH;
+  const L = lamH * W / 60;
+  const Pw = 2 * rho ** 2 / (1 + rho);            // probabilidad de tener que esperar
+  const Pn = n => n === 0 ? P0 : 2 * rho ** n * P0;
+  return { rho, r: lamH / muH, P0, Lq, Wq, W, L, Pw, Pn, lam: lamH };
+}
+
+/* =====================================================================
+   3. SIMULACIÓN POR EVENTOS
+   ===================================================================== */
+// Generador de números al azar con semilla (mulberry32): la misma semilla da la misma corrida
+function crearAleatorio(semilla) {
+  let a = semilla >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function simularFranja(lamH, muH, dur, semilla) {
+  const azar = crearAleatorio(semilla);
+  const exponencial = tasa => -Math.log(1 - azar()) / tasa;
+  const lam = lamH / 60, mu = muH / 60;
+  const libre = [0, 0];
+  const clientes = [];
+  let t = 0;
+  while (true) {
+    t += exponencial(lam);
+    if (t > dur) break;
+    let e;
+    if (libre[0] <= t) e = 0;
+    else if (libre[1] <= t) e = 1;
+    else e = libre[0] <= libre[1] ? 0 : 1;
+    const inicio = Math.max(t, libre[e]);
+    const fin = inicio + exponencial(mu);
+    libre[e] = fin;
+    clientes.push({ id: clientes.length + 1, llegada: t, empleado: e, inicio, fin });
+  }
+  return clientes;
+}
+
+// Mide una corrida (también sirve para los datos de campo)
+function medir(clientes, dur) {
+  const n = clientes.length;
+  let sumWq = 0, sumW = 0, esperaron = 0;
+  for (const c of clientes) {
+    const wq = c.inicio - c.llegada;
+    sumWq += wq; sumW += c.fin - c.llegada;
+    if (wq > 1e-9) esperaron++;
+  }
+  // Eventos: llegada (+1 local, +1 fila), inicio (−1 fila), fin (−1 local)
+  const ev = [];
+  for (const c of clientes) { ev.push([c.llegada, 1, 1]); ev.push([c.inicio, 0, -1]); ev.push([c.fin, -1, 0]); }
+  ev.sort((a, b) => a[0] - b[0]);
+  let enLocal = 0, enFila = 0, tAnt = 0, areaL = 0, areaLq = 0, areaOcup = 0;
+  const tiempoN = new Array(40).fill(0);
+  const serie = [{ t: 0, q: 0, n: 0 }];
+  const acumular = hasta => {
+    const d = Math.min(hasta, dur) - Math.min(tAnt, dur);
+    if (d > 0) {
+      areaL += enLocal * d; areaLq += enFila * d; areaOcup += (enLocal - enFila) * d;
+      tiempoN[Math.min(enLocal, 39)] += d;
+    }
+    tAnt = hasta;
+  };
+  for (const [t, dn, dq] of ev) { acumular(t); enLocal += dn; enFila += dq; serie.push({ t, q: enFila, n: enLocal }); }
+  acumular(Math.max(dur, tAnt));
+  return {
+    n, lam: n / dur * 60,
+    Wq: n ? sumWq / n : NaN, W: n ? sumW / n : NaN, Pw: n ? esperaron / n : NaN,
+    Lq: areaLq / dur, L: areaL / dur, rho: areaOcup / (2 * dur), P0: tiempoN[0] / dur,
+    Pn: tiempoN.map(x => x / dur), serie, atencion: n ? clientes.reduce((a, c) => a + c.fin - c.inicio, 0) / n : NaN,
+  };
+}
+
+const CLAVES = ['lam', 'rho', 'P0', 'Pw', 'Lq', 'L', 'Wq', 'W'];
+function correrReplicas(lamH, muH, dur, R, semilla) {
+  const corridas = [];
+  for (let k = 0; k < R; k++) {
+    const cl = simularFranja(lamH, muH, dur, semilla + k);
+    corridas.push({ clientes: cl, m: medir(cl, dur) });
+  }
+  const resumen = {};
+  for (const k of CLAVES) {
+    const v = corridas.map(c => c.m[k]).filter(Number.isFinite);
+    const m = v.reduce((a, b) => a + b, 0) / v.length;
+    const sd = v.length > 1 ? Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1)) : 0;
+    resumen[k] = { m, sd };
+  }
+  resumen.Pn = Array.from({ length: 40 }, (_, n) => corridas.reduce((a, c) => a + c.m.Pn[n], 0) / R);
+  return { corridas, resumen };
+}
+
+// Datos de campo medidos con el mismo código
+const MED_PICO = medir(CAMPO_PICO, 60);
+const MED_VALLE = (() => {
+  const W = CAMPO_VALLE.reduce((a, [l, f]) => a + f - l, 0);
+  return { lam: CAMPO_VALLE.length / 40 * 60, W: W / CAMPO_VALLE.length, L: W / 40 };
+})();
+
+/* =====================================================================
+   4. ESTADO DE LA PÁGINA
+   ===================================================================== */
+const est = {
+  esc: 'pico', lam: 35, mu: 60 / 2.9, dur: 60, inicio: 420, R: 20, semilla: 2026,
+  res: null, cl: [], med: null, tFin: 60,
+  t: 0, jugando: true, vel: 0.5, snap: true, sucio: false,
+};
+
+/* =====================================================================
+   5. ESCENA 3D DEL KIOSCO
+   ===================================================================== */
+const escenaEl = $('escena');
+let hay3D = true, renderer, scene, camera, controls;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (e) { hay3D = false; $('sin3d').hidden = false; }
+
+const W3 = {};  // referencias a objetos de la escena
+
+async function esperarFuentes() {
+  if (!document.fonts) return;
+  const cargar = Promise.all(['64px Yellowtail', '700 48px "Bricolage Grotesque"', '500 32px Onest'].map(f => document.fonts.load(f).catch(() => {})));
+  await Promise.race([cargar, new Promise(r => setTimeout(r, 2500))]);
+}
+
+function texCanvas(w, h, dibujar, repetir) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  dibujar(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  if (repetir) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repetir[0], repetir[1]); }
+  return t;
+}
+const DISPLAY = '"Bricolage Grotesque", "Trebuchet MS", sans-serif';
+const SCRIPT = 'Yellowtail, "Brush Script MT", cursive';
+
+const matCache = new Map();
+function mat(color, o = {}) {
+  const k = color + JSON.stringify(o);
+  if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0, ...o }));
+  return matCache.get(k);
+}
+function caja(w, h, d, material, x, y, z, sombra = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  m.position.set(x, y, z); m.castShadow = sombra; m.receiveShadow = true;
+  scene.add(m); return m;
+}
+function cil(rt, rb, h, material, x, y, z, seg = 16) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), material);
+  m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
+  scene.add(m); return m;
+}
+function plano(w, h, material, x, y, z, rx = 0, ry = 0) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material);
+  m.position.set(x, y, z); m.rotation.set(rx, ry, 0); m.receiveShadow = true;
+  scene.add(m); return m;
+}
+
+// --- Texturas dibujadas ---------------------------------------------------
+function texBaldosa() {
+  return texCanvas(512, 512, (g, w, h) => {
+    const tonos = ['#B85A3A', '#AF5335', '#BE6342', '#B05838'];
+    const s = w / 4, azar = crearAleatorio(7);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      g.fillStyle = tonos[Math.floor(azar() * tonos.length)];
+      g.fillRect(i * s, j * s, s, s);
+      g.strokeStyle = 'rgba(80,30,15,.16)'; g.lineWidth = 2;   // relieve de la baldosa
+      for (let k = 10; k < s; k += 12) {
+        g.beginPath(); g.moveTo(i * s + k, j * s + 6); g.lineTo(i * s + k, j * s + s - 6); g.stroke();
+        g.beginPath(); g.moveTo(i * s + 6, j * s + k); g.lineTo(i * s + s - 6, j * s + k); g.stroke();
+      }
+    }
+    g.strokeStyle = '#6A3424'; g.lineWidth = 6;
+    for (let k = 0; k <= 4; k++) { g.beginPath(); g.moveTo(k * s, 0); g.lineTo(k * s, h); g.stroke(); g.beginPath(); g.moveTo(0, k * s); g.lineTo(w, k * s); g.stroke(); }
+  }, [18, 6.5]);
+}
+function texAcero(w = 256, h = 512, vertical = true, rep) {
+  return texCanvas(w, h, (g) => {
+    const gr = vertical ? g.createLinearGradient(0, 0, w, 0) : g.createLinearGradient(0, 0, 0, h);
+    gr.addColorStop(0, '#AEB4B9'); gr.addColorStop(.5, '#D6DADD'); gr.addColorStop(1, '#B3B9BE');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    const azar = crearAleatorio(3);
+    for (let i = 0; i < 900; i++) {
+      g.strokeStyle = `rgba(${azar() < .5 ? '255,255,255' : '60,66,72'},${0.04 + azar() * 0.07})`; g.lineWidth = 1;
+      g.beginPath();
+      if (vertical) { const x = azar() * w; g.moveTo(x, azar() * h); g.lineTo(x, azar() * h); }
+      else { const y = azar() * h; g.moveTo(azar() * w, y); g.lineTo(azar() * w, y); }
+      g.stroke();
+    }
+  }, rep);
+}
+function texMostrador() {
+  return texCanvas(2048, 290, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, w, 0);
+    gr.addColorStop(0, '#B4BABF'); gr.addColorStop(.35, '#D9DDE0'); gr.addColorStop(.7, '#BFC4C8'); gr.addColorStop(1, '#D0D4D7');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    const azar = crearAleatorio(11);
+    for (let i = 0; i < 2600; i++) {
+      g.strokeStyle = `rgba(${azar() < .5 ? '255,255,255' : '70,76,82'},${0.03 + azar() * 0.06})`;
+      const y = azar() * h; g.beginPath(); g.moveTo(azar() * w, y); g.lineTo(azar() * w, y); g.stroke();
+    }
+    // juntas de los paneles y remaches
+    g.strokeStyle = 'rgba(40,44,48,.55)'; g.lineWidth = 4;
+    [0.2, 0.84].forEach(p => { g.beginPath(); g.moveTo(w * p, 0); g.lineTo(w * p, h); g.stroke(); });
+    g.fillStyle = 'rgba(40,44,48,.6)';
+    [0.015, 0.185, 0.215, 0.825, 0.855, 0.985].forEach(p => [22, h - 22].forEach(y => { g.beginPath(); g.arc(w * p, y, 6, 0, 7); g.fill(); }));
+    const grabado = (txt, x, y, font, align = 'center') => {
+      g.font = font; g.textAlign = align; g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(255,255,255,.55)'; g.fillText(txt, x + 2, y + 2);
+      g.fillStyle = '#1C1F22'; g.fillText(txt, x, y);
+    };
+    // "24 Horas"
+    g.strokeStyle = '#1C1F22'; g.lineWidth = 5; g.strokeRect(w * 0.06, 70, 150, 150);
+    grabado('24', w * 0.06 + 75, 128, `700 76px ${DISPLAY}`); grabado('Horas', w * 0.06 + 75, 188, `44px ${SCRIPT}`);
+    // logo
+    const cx = w * 0.42, cy = h / 2;
+    g.lineWidth = 7; g.strokeStyle = '#1C1F22'; g.beginPath(); g.ellipse(cx, cy, 190, 118, 0, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 3; g.beginPath(); g.ellipse(cx, cy, 172, 102, 0, 0, Math.PI * 2); g.stroke();
+    grabado('Juan', cx - 40, cy - 46, `64px ${SCRIPT}`);
+    grabado('Pastel', cx + 10, cy + 12, `104px ${SCRIPT}`);
+    grabado('PUNTO SALUDABLE', cx, cy + 78, `600 22px ${DISPLAY}`);
+    // frase
+    grabado('¡eres', w * 0.63, 72, `84px ${SCRIPT}`, 'left');
+    grabado('lo que', w * 0.655, 150, `84px ${SCRIPT}`, 'left');
+    grabado('comes!', w * 0.665, 228, `84px ${SCRIPT}`, 'left');
+    // sellos pequeños
+    [0.25, 0.5, 0.75].forEach(p => {
+      g.lineWidth = 3; g.strokeStyle = '#1C1F22'; g.beginPath(); g.arc(w * 0.92, h * p, 32, 0, 7); g.stroke();
+      grabado('JP', w * 0.92, h * p, `34px ${SCRIPT}`);
+    });
+  });
+}
+function texPantalla(tipo) {
+  return texCanvas(640, 360, (g, w, h) => {
+    const fondos = { pasteles: ['#4A2210', '#A4521D'], jugos: ['#123A2A', '#2E7A4F'], cafe: ['#2A1810', '#6B3B22'] };
+    const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, fondos[tipo][0]); gr.addColorStop(1, fondos[tipo][1]);
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(255,255,255,.07)'; g.beginPath(); g.arc(w * 0.8, h * 0.1, 260, 0, 7); g.fill();
+    if (tipo === 'pasteles') {
+      const pastel = (x, y, s, rot) => {
+        g.save(); g.translate(x, y); g.rotate(rot); g.scale(s, s);
+        const gp = g.createLinearGradient(0, -70, 0, 30); gp.addColorStop(0, '#FBD07A'); gp.addColorStop(1, '#C9762A');
+        g.fillStyle = gp; g.beginPath(); g.arc(0, 20, 78, Math.PI, 0); g.closePath(); g.fill();
+        g.fillStyle = '#B5651F';
+        for (let i = 0; i <= 10; i++) { const a = Math.PI + i * Math.PI / 10; g.beginPath(); g.arc(Math.cos(a) * 78, 20 + Math.sin(a) * 78, 9, 0, 7); g.fill(); }
+        g.fillStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.ellipse(-20, -20, 26, 9, -0.3, 0, 7); g.fill();
+        g.restore();
+      };
+      pastel(w * 0.24, h * 0.56, 0.95, -0.12); pastel(w * 0.52, h * 0.5, 1.15, 0.06); pastel(w * 0.8, h * 0.58, 0.9, 0.18);
+    } else if (tipo === 'jugos') {
+      const vaso = (x, color, s) => {
+        g.save(); g.translate(x, h * 0.6); g.scale(s, s);
+        g.fillStyle = 'rgba(255,255,255,.25)'; g.beginPath(); g.moveTo(-52, -110); g.lineTo(52, -110); g.lineTo(40, 70); g.lineTo(-40, 70); g.closePath(); g.fill();
+        g.fillStyle = color; g.beginPath(); g.moveTo(-48, -80); g.lineTo(48, -80); g.lineTo(38, 64); g.lineTo(-38, 64); g.closePath(); g.fill();
+        g.fillStyle = 'rgba(255,255,255,.45)'; g.fillRect(-20, -60, 18, 18); g.fillRect(6, -40, 16, 16);
+        g.strokeStyle = '#F4F4F4'; g.lineWidth = 8; g.beginPath(); g.moveTo(14, -78); g.lineTo(34, -150); g.stroke();
+        g.restore();
+      };
+      vaso(w * 0.24, '#F2902B', 0.95); vaso(w * 0.5, '#C9324F', 1.1); vaso(w * 0.76, '#9BC53D', 0.95);
+    } else {
+      g.save(); g.translate(w * 0.5, h * 0.6);
+      g.fillStyle = '#F2EDE6'; g.beginPath(); g.ellipse(0, 70, 150, 26, 0, 0, 7); g.fill();
+      g.beginPath(); g.moveTo(-95, -60); g.lineTo(95, -60); g.lineTo(75, 60); g.lineTo(-75, 60); g.closePath(); g.fill();
+      g.lineWidth = 18; g.strokeStyle = '#F2EDE6'; g.beginPath(); g.arc(98, -5, 36, -1.3, 1.3); g.stroke();
+      g.fillStyle = '#5A2E17'; g.beginPath(); g.ellipse(0, -60, 95, 16, 0, 0, 7); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 7; g.lineCap = 'round';
+      [-40, 0, 40].forEach(x => { g.beginPath(); g.moveTo(x, -90); g.bezierCurveTo(x - 24, -120, x + 24, -140, x, -170); g.stroke(); });
+      g.restore();
+    }
+    g.fillStyle = '#FFFFFF'; g.font = `700 46px ${DISPLAY}`; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    g.fillText({ pasteles: 'Pasteles', jugos: 'Jugos naturales', cafe: 'Café y avena' }[tipo], 30, h - 26);
+  });
+}
+function texCartel(tipo) {
+  return texCanvas(400, 320, (g, w, h) => {
+    if (tipo === 'paga') {
+      g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#16212B'; g.font = `700 40px ${DISPLAY}`; g.textAlign = 'center'; g.fillText('Paga aquí', w / 2, 52);
+      const azar = crearAleatorio(5), n = 21, s = 9, x0 = w / 2 - n * s / 2, y0 = 76;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (azar() < .48) g.fillRect(x0 + i * s, y0 + j * s, s, s);
+      [[0, 0], [n - 7, 0], [0, n - 7]].forEach(([i, j]) => {
+        g.fillStyle = '#16212B'; g.fillRect(x0 + i * s, y0 + j * s, 7 * s, 7 * s);
+        g.fillStyle = '#FFF'; g.fillRect(x0 + (i + 1) * s, y0 + (j + 1) * s, 5 * s, 5 * s);
+        g.fillStyle = '#16212B'; g.fillRect(x0 + (i + 2) * s, y0 + (j + 2) * s, 3 * s, 3 * s);
+      });
+      g.fillStyle = '#16212B'; g.font = `500 24px ${DISPLAY}`; g.fillText('Nequi · transferencia', w / 2, h - 22);
+    } else {
+      g.fillStyle = '#1E1B19'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#F4C873'; g.font = `60px ${SCRIPT}`; g.textAlign = 'center'; g.fillText('Menú', w / 2, 66);
+      g.fillStyle = '#EDE6DC'; g.font = `500 30px ${DISPLAY}`;
+      ['Pasteles', 'Empanadas', 'Jugos naturales', 'Café · Avena'].forEach((t, i) => g.fillText(t, w / 2, 122 + i * 48));
+    }
+  });
+}
+function texToldo(alto = 512) {
+  return texCanvas(512, alto, (g, w, h) => {
+    const n = 8, s = w / n;
+    for (let i = 0; i < n; i++) { g.fillStyle = i % 2 ? '#F4F1EC' : '#C42033'; g.fillRect(i * s, 0, s, h); }
+  });
+}
+function texFaldon() {
+  return texCanvas(1024, 128, (g, w, h) => {
+    const n = 16, s = w / n;
+    g.clearRect(0, 0, w, h);
+    for (let i = 0; i < n; i++) {
+      g.fillStyle = i % 2 ? '#F4F1EC' : '#C42033';
+      g.beginPath(); g.moveTo(i * s, 0); g.lineTo(i * s + s, 0); g.lineTo(i * s + s, h * 0.55);
+      g.quadraticCurveTo(i * s + s / 2, h * 1.05, i * s, h * 0.55); g.closePath(); g.fill();
+    }
+  });
+}
+function texCalcomania(texto, sub, color) {
+  return texCanvas(512, 256, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = 'rgba(255,248,232,.92)'; g.strokeStyle = color; g.lineWidth = 10; g.setLineDash([26, 14]);
+    g.beginPath(); g.roundRect(12, 12, w - 24, h - 24, 34); g.fill(); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#16212B'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `700 64px ${DISPLAY}`; g.fillText(texto, w / 2, h / 2 - (sub ? 22 : 0));
+    if (sub) { g.font = `500 34px ${DISPLAY}`; g.fillText(sub, w / 2, h / 2 + 44); }
+  });
+}
+function texPuesto(nombre) {
+  return texCanvas(256, 256, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = 'rgba(255,248,232,.92)'; g.beginPath(); g.arc(w / 2, h / 2, 118, 0, 7); g.fill();
+    g.strokeStyle = '#1F8659'; g.lineWidth = 12; g.beginPath(); g.arc(w / 2, h / 2, 110, 0, 7); g.stroke();
+    g.fillStyle = '#16212B'; g.font = `700 92px ${DISPLAY}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(nombre, w / 2, h / 2 + 4);
+  });
+}
+function texAviso() {
+  return texCanvas(512, 512, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.fillStyle = '#FFFFFF'; g.beginPath(); g.arc(w / 2, h / 2, 250, 0, 7); g.fill();
+    g.strokeStyle = '#C42033'; g.lineWidth = 22; g.beginPath(); g.arc(w / 2, h / 2, 232, 0, 7); g.stroke();
+    g.fillStyle = '#8E2A63'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `120px ${SCRIPT}`; g.fillText('Juan', w / 2 - 30, h / 2 - 60);
+    g.font = `150px ${SCRIPT}`; g.fillText('Pastel', w / 2 + 10, h / 2 + 50);
+  });
+}
+function texEtiqueta() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 200;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return { c, t, g: c.getContext('2d'), clave: '' };
+}
+
+// --- Construcción del entorno --------------------------------------------
+const SLOT0 = 2.05, PASO = 0.72, MAXVIS = 26;
+const PUESTO = [new THREE.Vector3(-1.7, 0, 0.62), new THREE.Vector3(1.7, 0, 0.62)];
+function slotFila(k) {                       // posición del puesto k en la fila única
+  if (k <= 8) return new THREE.Vector3(0, 0, SLOT0 + k * PASO);
+  return new THREE.Vector3(-(k - 8) * PASO, 0, SLOT0 + 8 * PASO);
+}
+const MESAS = [[6.4, 2.7], [9.6, 2.7], [6.4, 6.0], [9.6, 6.0]];
+const OFFS_SILLA = [[0.7, 0], [-0.7, 0], [0, 0.7], [0, -0.7]];
+// puestos donde se sientan los clientes que comen en el local (solo visual)
+const SILLAS = MESAS.flatMap(([mx, mz]) => OFFS_SILLA.map(([dx, dz]) => ({ x: mx + dx * 0.95, z: mz + dz * 0.95, rot: Math.atan2(-dx, -dz) })));
+
+function construirEntorno() {
+  // piso de baldosa, calle y andén
+  const piso = plano(36, 13, new THREE.MeshStandardMaterial({ map: texBaldosa(), roughness: 0.85 }), 0, 0, 2.5, -Math.PI / 2);
+  piso.receiveShadow = true;
+  plano(44, 18, mat('#3B3E43', { roughness: 0.95 }), 0, -0.02, 18.2, -Math.PI / 2);
+  caja(44, 0.18, 0.35, mat('#A6A49D'), 0, 0.07, 9.17, false);
+  plano(44, 0.12, mat('#E8D36A', { roughness: 0.9 }), 0, 0.072, 12.2, -Math.PI / 2).receiveShadow = false;
+  plano(36, 0.12, mat('#D9A93A', { roughness: 0.8 }), 0, 0.006, 8.65, -Math.PI / 2);
+
+  // edificio blanco detrás
+  caja(36, 7.2, 0.5, mat('#ECEAE5', { roughness: 0.95 }), 0, 3.6, -4.3, false);
+  caja(36, 0.25, 0.7, mat('#D8D5CE'), 0, 4.1, -4.0, false);
+  [-13, -9, 9, 13].forEach(x => caja(2.2, 1.6, 0.1, mat('#2C3238', { roughness: 0.3, metalness: 0.2 }), x, 5.6, -4.0, false));
+
+  // --- Kiosco ---
+  const madera = mat('#262321', { roughness: 0.6 });
+  const oscuro = mat('#16191C', { roughness: 0.35 });
+  const acero = new THREE.MeshStandardMaterial({ map: texAcero(256, 512, true), metalness: 0.75, roughness: 0.32 });
+  caja(8.4, 3.45, 0.2, madera, 0, 1.72, -3.15);                    // fondo
+  [-4.15, 4.15].forEach(x => caja(0.2, 3.45, 3.0, madera, x, 1.72, -1.7));
+  [-3.95, 3.95].forEach(x => caja(0.62, 3.5, 0.62, acero, x, 1.75, -0.3));   // columnas de acero
+  caja(8.9, 0.2, 3.9, mat('#2A2E33', { roughness: 0.5 }), 0, 3.58, -1.4);    // techo
+  caja(7.4, 0.95, 0.32, oscuro, 0, 3.02, -0.24);                    // franja de pantallas
+  // mostrador
+  caja(7.3, 1.05, 0.7, mat('#3A3F44'), 0, 0.525, -0.42);
+  plano(7.3, 1.03, new THREE.MeshStandardMaterial({ map: texMostrador(), metalness: 0.55, roughness: 0.36 }), 0, 0.52, -0.065);
+  caja(7.45, 0.07, 0.9, oscuro, 0, 1.085, -0.4);
+  // estanterías laterales de madera negra con carteles
+  [-1, 1].forEach(s => {
+    caja(1.35, 1.35, 0.42, madera, s * 2.75, 1.82, -0.5);
+    [1.55, 2.05].forEach(y => caja(1.35, 0.05, 0.36, mat('#3A3532'), s * 2.75, y, -0.25));
+    plano(1.15, 0.92, new THREE.MeshStandardMaterial({ map: texCartel(s < 0 ? 'menu' : 'paga'), roughness: 0.6 }), s * 2.75, 2.97, -0.07);
+  });
+  // pantallas del menú (se ven encendidas)
+  ['pasteles', 'jugos', 'cafe'].forEach((tipo, i) => {
+    caja(1.38, 0.8, 0.05, mat('#0D0F11'), (i - 1) * 1.47, 3.02, -0.06, false);
+    plano(1.3, 0.73, new THREE.MeshBasicMaterial({ map: texPantalla(tipo) }), (i - 1) * 1.47, 3.02, -0.03);
+  });
+  // vitrina caliente con pasteles
+  const marco = new THREE.MeshStandardMaterial({ map: texAcero(256, 128, false), metalness: 0.8, roughness: 0.28 });
+  caja(1.95, 0.12, 0.62, marco, 0, 1.18, -0.42);
+  caja(1.95, 0.1, 0.62, marco, 0, 2.12, -0.42);
+  [-0.95, 0.95].forEach(x => caja(0.06, 0.86, 0.6, marco, x, 1.66, -0.42));
+  plano(1.85, 0.84, new THREE.MeshStandardMaterial({ color: '#FFD08A', emissive: '#FF9A3C', emissiveIntensity: 0.55, roughness: 0.9 }), 0, 1.66, -0.71);
+  const vidrio = new THREE.MeshStandardMaterial({ color: '#E8F4F8', transparent: true, opacity: 0.16, roughness: 0.05, metalness: 0.1, depthWrite: false });
+  const vit = new THREE.Mesh(new THREE.BoxGeometry(1.84, 0.84, 0.56), vidrio); vit.position.set(0, 1.66, -0.42); scene.add(vit);
+  const masa = mat('#D99238', { roughness: 0.55 }), geoPastel = new THREE.SphereGeometry(0.1, 14, 10);
+  [1.3, 1.56, 1.82].forEach((y, fila) => {
+    if (fila) caja(1.82, 0.015, 0.5, vidrio, 0, y - 0.07, -0.42, false);
+    for (let i = 0; i < 7; i++) {
+      const p = new THREE.Mesh(geoPastel, masa);
+      p.scale.set(1.15, 0.62, 0.85); p.position.set(-0.72 + i * 0.24, y, -0.42 + (i % 2 ? 0.08 : -0.06)); p.rotation.y = i * 0.7;
+      scene.add(p);
+    }
+  });
+  const luzVitrina = new THREE.PointLight('#FFAA55', 2.2, 3, 2); luzVitrina.position.set(0, 1.9, -0.3); scene.add(luzVitrina);
+  // barra trasera
+  caja(7.0, 0.95, 0.6, oscuro, 0, 0.475, -2.75);
+  [-2.4, -1.9].forEach(x => { cil(0.11, 0.09, 0.32, mat('#C9D3D8', { transparent: true, opacity: 0.7 }), x, 1.12, -2.75); cil(0.12, 0.12, 0.12, oscuro, x, 0.98, -2.75); });
+  for (let i = 0; i < 4; i++) cil(0.06, 0.05, 0.3 + i * 0.05, mat('#F3F0EA'), 2.0 + i * 0.22, 1.1 + i * 0.025, -2.75, 10);
+  caja(0.5, 0.3, 0.4, mat('#2E3338'), 0.9, 1.1, -2.75);
+  const luzK = new THREE.PointLight('#FFE2B8', 6, 9, 2); luzK.position.set(0, 3.2, -1.6); scene.add(luzK);
+  // aviso redondo de la marca
+  const aviso = cil(0.62, 0.62, 0.08, mat('#F4F2EE'), -5.05, 2.75, 0.05, 40); aviso.rotation.x = Math.PI / 2;
+  const caraAviso = new THREE.Mesh(new THREE.CircleGeometry(0.6, 48), new THREE.MeshStandardMaterial({ map: texAviso(), roughness: 0.5, transparent: true }));
+  caraAviso.position.set(-5.05, 2.75, 0.095); scene.add(caraAviso);
+  caja(0.5, 0.06, 0.06, oscuro, -4.55, 3.42, 0.05);
+
+  // calcomanías en el piso
+  const deco = (tex, w, h, x, z) => { const m = plano(w, h, new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }), x, 0.012, z, -Math.PI / 2); m.receiveShadow = false; return m; };
+  deco(texCalcomania('Haga la fila aquí', 'Fila única', '#C9831B'), 1.5, 0.75, 0, SLOT0 - 0.6);
+  PUESTO.forEach((p, i) => deco(texPuesto('E' + (i + 1)), 0.85, 0.85, p.x, p.z));
+  const geoHuella = new THREE.RingGeometry(0.16, 0.22, 28), matHuella = new THREE.MeshBasicMaterial({ color: '#E3B04B', transparent: true, opacity: 0.75, depthWrite: false });
+  for (let k = 1; k < 22; k++) { const p = slotFila(k); const r = new THREE.Mesh(geoHuella, matHuella); r.rotation.x = -Math.PI / 2; r.position.set(p.x, 0.011, p.z); scene.add(r); }
+
+  // toldo de rayas, mesas y sillas
+  const blanco = mat('#EEEDEA', { roughness: 0.5, metalness: 0.2 });
+  [[5.0, 1.3], [11.6, 1.3], [5.0, 7.9], [11.6, 7.9]].forEach(([x, z]) => cil(0.05, 0.05, 2.9, blanco, x, 1.45, z, 10));
+  const toldo = plano(7.2, 6.9, new THREE.MeshStandardMaterial({ map: texToldo(), side: THREE.DoubleSide, roughness: 0.8 }), 8.3, 2.95, 4.6, -Math.PI / 2 + 0.06);
+  toldo.castShadow = true;
+  plano(7.2, 0.5, new THREE.MeshStandardMaterial({ map: texFaldon(), transparent: true, side: THREE.DoubleSide, alphaTest: 0.3, roughness: 0.8 }), 8.3, 2.78, 8.2).castShadow = true;
+  const ratan = new THREE.MeshStandardMaterial({ roughness: 0.85, map: texCanvas(128, 128, (g, w, h) => {
+    g.fillStyle = '#D8C7A0'; g.fillRect(0, 0, w, h); g.strokeStyle = 'rgba(120,95,55,.45)'; g.lineWidth = 3;
+    for (let k = 0; k < w; k += 10) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + h, h); g.stroke(); g.beginPath(); g.moveTo(k, 0); g.lineTo(k - h, h); g.stroke(); }
+  }, [2, 2]) });
+  const negro = mat('#1B1D20', { roughness: 0.45 });
+  MESAS.forEach(([mx, mz]) => {
+    caja(0.9, 0.05, 0.9, mat('#F2F1EE', { roughness: 0.4 }), mx, 0.75, mz);
+    cil(0.05, 0.05, 0.72, negro, mx, 0.37, mz, 10); cil(0.3, 0.32, 0.03, negro, mx, 0.015, mz, 20);
+    OFFS_SILLA.forEach(([dx, dz]) => {
+      const g = new THREE.Group(); g.position.set(mx + dx, 0, mz + dz); g.rotation.y = Math.atan2(-dx, -dz);
+      const asiento = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.05, 0.44), ratan); asiento.position.y = 0.46;
+      const respaldo = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.5, 0.04), ratan); respaldo.position.set(0, 0.74, -0.21);
+      g.add(asiento, respaldo);
+      [[-0.19, -0.19], [0.19, -0.19], [-0.19, 0.19], [0.19, 0.19]].forEach(([a, b]) => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.46, 0.035), negro); p.position.set(a, 0.23, b); g.add(p); });
+      [-0.21, 0.21].forEach(a => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.52, 0.035), negro); p.position.set(a, 0.73, -0.21); g.add(p); });
+      g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      scene.add(g);
+    });
+  });
+
+  // árbol con el tronco encalado, poste y bolardos
+  cil(0.2, 0.26, 3.4, mat('#6B5444', { roughness: 0.95 }), -11.8, 1.7, 8.4, 12);
+  cil(0.27, 0.27, 1.1, mat('#F2F0EA'), -11.8, 0.55, 8.4, 12);
+  const hoja = [mat('#4F7D3A', { flatShading: true }), mat('#5E9145', { flatShading: true }), mat('#43702F', { flatShading: true })];
+  [[0, 4.2, 0, 1.5], [1.0, 3.8, 0.4, 1.1], [-1.0, 3.9, -0.3, 1.15], [0.2, 4.9, -0.5, 1.0], [-0.4, 3.6, 0.9, 0.9]].forEach(([x, y, z, r], i) => {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), hoja[i % 3]); m.position.set(-11.8 + x, y, 8.4 + z); m.castShadow = true; scene.add(m);
+  });
+  cil(0.13, 0.15, 7, mat('#8E8A84'), -6.2, 3.5, 8.75, 12);
+  [['#C42033', 0.5], ['#F2F0EA', 0.9], ['#2F7D46', 1.3]].forEach(([c, y]) => cil(0.155, 0.155, 0.4, mat(c), -6.2, y, 8.75, 12));
+  for (let x = 4.6; x <= 12; x += 1.48) { cil(0.07, 0.07, 0.8, mat('#F2F0EA'), x, 0.4, 8.78, 10); cil(0.075, 0.075, 0.14, mat('#C42033'), x, 0.6, 8.78, 10); }
+}
+
+// --- Personas -------------------------------------------------------------
+const G = {
+  pierna: new THREE.CapsuleGeometry(0.085, 0.4, 4, 8),
+  torso: new THREE.CapsuleGeometry(0.21, 0.3, 6, 14),
+  brazo: new THREE.CapsuleGeometry(0.058, 0.4, 4, 8),
+  cabeza: new THREE.SphereGeometry(0.155, 20, 16),
+  pelo: new THREE.SphereGeometry(0.165, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.55),
+  ojo: new THREE.SphereGeometry(0.018, 8, 6),
+  morral: new THREE.BoxGeometry(0.3, 0.36, 0.14),
+  cuello: new THREE.CylinderGeometry(0.13, 0.15, 0.06, 16),
+  aro: new THREE.RingGeometry(0.27, 0.36, 36),
+};
+const CAMISAS = ['#3A6EA5', '#C8553D', '#2F8F83', '#E0B13A', '#6B4E9B', '#F2F2F2', '#27323D', '#D46A8C', '#7A8B3A', '#A33A3A', '#5BA3C9'];
+const PANTALONES = ['#2B3A55', '#3B3B3B', '#4E4236', '#1F2A36', '#53606E'];
+const PIELES = ['#F1C9A5', '#E0B088', '#C99269', '#A8754E', '#8A5A3C'];
+const PELOS = ['#1E1612', '#3B2A1E', '#0F0F0F', '#6B4A2B', '#2A1D14'];
+const COLOR_ESTADO = { fila: new THREE.Color('#E0A43A'), atencion: new THREE.Color('#2FB070') };
+
+function crearPersona(ropa) {
+  const g = new THREE.Group();
+  const add = (geo, m, x, y, z, padre = g) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; padre.add(o); return o; };
+  const piernas = [-0.1, 0.1].map(x => { const p = new THREE.Group(); p.position.set(x, 0.62, 0); g.add(p); add(G.pierna, mat(ropa.pantalon), 0, -0.3, 0, p); return p; });
+  const torso = add(G.torso, mat(ropa.camisa), 0, 0.98, 0); torso.scale.z = 0.78;
+  const brazos = [-0.27, 0.27].map(x => { const p = new THREE.Group(); p.position.set(x, 1.24, 0); p.rotation.z = x < 0 ? -0.08 : 0.08; g.add(p); add(G.brazo, mat(ropa.camisa), 0, -0.25, 0, p); return p; });
+  const cabeza = new THREE.Group(); cabeza.position.y = 1.5; g.add(cabeza);
+  add(G.cabeza, mat(ropa.piel, { roughness: 0.6 }), 0, 0, 0, cabeza);
+  const pelo = add(G.pelo, mat(ropa.pelo, { roughness: 0.9 }), 0, 0.012, -0.012, cabeza); pelo.rotation.x = -0.35;
+  [-0.055, 0.055].forEach(x => add(G.ojo, mat('#141414', { roughness: 0.3 }), x, 0.02, 0.145, cabeza));
+  if (ropa.cuello) add(G.cuello, mat(ropa.cuello), 0, 1.33, 0);
+  if (ropa.morral) add(G.morral, mat(ropa.morral), 0, 1.05, -0.2);
+  const aro = new THREE.Mesh(G.aro, new THREE.MeshBasicMaterial({ color: '#E0A43A', transparent: true, opacity: 0.95, depthWrite: false }));
+  aro.rotation.x = -Math.PI / 2; aro.position.y = 0.02; aro.visible = false; g.add(aro);
+  g.scale.setScalar(ropa.escala || 1);
+  g.userData = { piernas, brazos, cabeza, aro, fase: Math.random() * 6 };
+  return g;
+}
+function ropaCliente(id, semilla) {
+  const a = crearAleatorio(semilla * 1013 + id * 7919), p = arr => arr[Math.floor(a() * arr.length)];
+  return { camisa: p(CAMISAS), pantalon: p(PANTALONES), piel: p(PIELES), pelo: p(PELOS), morral: a() < 0.55 ? p(['#2B2F36', '#7A2E2E', '#28507A', '#3F5B3A']) : null, escala: 0.93 + a() * 0.14 };
+}
+
+let grupoClientes, empleados = [], etiquetas = [];
+const SPAWN = [new THREE.Vector3(-14, 0, 12), new THREE.Vector3(14, 0, 12)];
+const SALIDA = [new THREE.Vector3(-15, 0, 1.0), new THREE.Vector3(15, 0, 0.7)];
+const SALIDA_MESA = new THREE.Vector3(15, 0, 4.35);   // pasillo entre las mesas
+
+function crearEmpleados() {
+  [-1.7, 1.7].forEach((x, i) => {
+    const e = crearPersona({ camisa: '#1F3B66', pantalon: '#1A1C20', piel: i ? '#C99269' : '#A8754E', pelo: '#141010', cuello: '#7DC0EA', escala: 1.02 });
+    e.position.set(x, 0, -1.3); scene.add(e); empleados.push(e);
+    const et = texEtiqueta();
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: et.t, transparent: true, depthWrite: false }));
+    sp.scale.set(1.5, 0.586, 1); sp.position.set(x, 2.38, 0.7); sp.renderOrder = 5; scene.add(sp);
+    etiquetas.push(et);
+  });
+}
+function dibujarEtiqueta(et, nombre, ocupado, progreso, resta) {
+  const clave = `${nombre}${ocupado}${Math.round(progreso * 50)}${ocupado ? resta.toFixed(1) : ''}`;
+  if (clave === et.clave) return; et.clave = clave;
+  const g = et.g, w = et.c.width, h = et.c.height;
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(255,255,255,.94)'; g.beginPath(); g.roundRect(6, 6, w - 12, h - 12, 34); g.fill();
+  g.strokeStyle = ocupado ? '#C42033' : '#1F8659'; g.lineWidth = 6; g.stroke();
+  g.fillStyle = ocupado ? '#C42033' : '#1F8659'; g.beginPath(); g.arc(54, 70, 17, 0, 7); g.fill();
+  g.fillStyle = '#16212B'; g.font = `700 58px ${DISPLAY}`; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(nombre, 84, 72);
+  g.font = `500 40px ${DISPLAY}`; g.fillStyle = '#3C4853'; g.fillText(ocupado ? 'ocupado' : 'libre', 172, 72);
+  if (ocupado) { g.textAlign = 'right'; g.fillStyle = '#16212B'; g.font = `700 40px ${DISPLAY}`; g.fillText(`${resta.toFixed(1)} min`, w - 38, 72); }
+  g.fillStyle = '#E3E7EA'; g.beginPath(); g.roundRect(40, 128, w - 80, 26, 13); g.fill();
+  if (ocupado) { g.fillStyle = '#C9831B'; g.beginPath(); g.roundRect(40, 128, Math.max(26, (w - 80) * progreso), 26, 13); g.fill(); }
+  et.t.needsUpdate = true;
+}
+
+// --- Cielo y luz según la hora -------------------------------------------
+const LUCES = {
+  manana: { cielo: '#8DB5D3', horiz: '#E7EDEF', sol: '#FFF0D8', int: 2.6, pos: [-10, 14, 12], hemi: 1.0 },
+  medio:  { cielo: '#78AEDD', horiz: '#E9F1F5', sol: '#FFFFFF', int: 2.9, pos: [3, 18, 7], hemi: 1.05 },
+  tarde:  { cielo: '#5F7FAD', horiz: '#F1BE88', sol: '#FFC48C', int: 2.3, pos: [14, 7.5, 9], hemi: 0.8 },
+};
+let luz = { ...LUCES.manana }, luzDe = null, luzA = null, luzT0 = 0;
+let sol, hemi, cieloCanvas, cieloTex;
+function pintarCielo(a, b) {
+  const g = cieloCanvas.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 512);
+  gr.addColorStop(0, a); gr.addColorStop(0.62, b); gr.addColorStop(1, b);
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 512); cieloTex.needsUpdate = true;
+}
+function aplicarLuz(p) {
+  sol.color.set(p.sol); sol.intensity = p.int; sol.position.set(...p.pos);
+  hemi.intensity = p.hemi; hemi.color.set(p.cielo);
+  pintarCielo(p.cielo, p.horiz); scene.fog.color.set(p.horiz);
+}
+function luzPara(minDia) { const h = minDia / 60; return h < 11 ? 'manana' : h < 15 ? 'medio' : 'tarde'; }
+function cambiarLuz(nombre) {
+  if (!hay3D) return;
+  luzDe = { ...luz }; luzA = LUCES[nombre]; luzT0 = performance.now();
+}
+function mezclarLuz() {
+  if (!luzA) return;
+  const u = Math.min(1, (performance.now() - luzT0) / 1200), e = u * u * (3 - 2 * u);
+  const c = (a, b) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), e).getHexString();
+  luz = { cielo: c(luzDe.cielo, luzA.cielo), horiz: c(luzDe.horiz, luzA.horiz), sol: c(luzDe.sol, luzA.sol),
+    int: luzDe.int + (luzA.int - luzDe.int) * e, hemi: luzDe.hemi + (luzA.hemi - luzDe.hemi) * e,
+    pos: luzDe.pos.map((v, i) => v + (luzA.pos[i] - v) * e) };
+  aplicarLuz(luz);
+  if (u >= 1) luzA = null;
+}
+
+// --- Cámara ---------------------------------------------------------------
+const VISTAS = {
+  general:   { pos: [10.5, 8.8, 16], obj: [0.5, 1.0, 2.6] },
+  mostrador: { pos: [0.2, 2.5, 5.6], obj: [0, 1.35, -0.6] },
+  fila:      { pos: [-8, 4.2, 11.5], obj: [0, 1.0, 3.6] },
+  planta:    { pos: [0.01, 23, 4.5], obj: [0, 0, 3.6] },
+};
+let camAnim = null;
+function irAVista(nombre) {
+  document.querySelectorAll('[data-vista]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.vista === nombre)));
+  if (!hay3D) return;
+  const v = VISTAS[nombre];
+  camAnim = { p0: camera.position.clone(), o0: controls.target.clone(), p1: new THREE.Vector3(...v.pos), o1: new THREE.Vector3(...v.obj), t0: performance.now(),
+    dur: matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 900 };
+}
+
+async function iniciar3D() {
+  if (!hay3D) return;
+  await esperarFuentes();
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
+  escenaEl.prepend(renderer.domElement);
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+  camera.position.set(...VISTAS.general.pos);
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(...VISTAS.general.obj);
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.minDistance = 3.5; controls.maxDistance = 36; controls.maxPolarAngle = 1.5;
+  controls.addEventListener('start', () => { camAnim = null; document.querySelectorAll('[data-vista]').forEach(b => b.setAttribute('aria-pressed', 'false')); });
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+  cieloCanvas = document.createElement('canvas'); cieloCanvas.width = 4; cieloCanvas.height = 512;
+  cieloTex = new THREE.CanvasTexture(cieloCanvas); cieloTex.colorSpace = THREE.SRGBColorSpace;
+  scene.background = cieloTex; scene.fog = new THREE.Fog('#E7EDEF', 34, 80);
+  hemi = new THREE.HemisphereLight('#8DB5D3', '#7A4A35', 1.0); scene.add(hemi);
+  sol = new THREE.DirectionalLight('#FFF0D8', 2.6);
+  sol.castShadow = true; sol.shadow.mapSize.set(2048, 2048); sol.shadow.bias = -0.0004; sol.shadow.normalBias = 0.02;
+  Object.assign(sol.shadow.camera, { left: -17, right: 17, top: 14, bottom: -12, near: 1, far: 60 });
+  sol.target.position.set(0, 0, 2); scene.add(sol, sol.target);
+  aplicarLuz(luz);
+  construirEntorno();
+  crearEmpleados();
+  grupoClientes = new THREE.Group(); scene.add(grupoClientes);
+  new ResizeObserver(redimensionar).observe(escenaEl); redimensionar();
+  configurarTooltip();
+}
+function redimensionar() {
+  if (!hay3D || !camera) return;
+  const w = escenaEl.clientWidth, h = escenaEl.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+
+/* =====================================================================
+   6. REPRODUCCIÓN: dónde está cada cliente en el minuto t
+   ===================================================================== */
+const mallas = new Map();     // id de cliente -> figura 3D
+function estadoCliente(c, t) {
+  if (t < c.llegada) return 'nada';
+  if (t < c.inicio) return 'fila';
+  if (t < c.fin) return 'atencion';
+  if (c.silla != null && t < c.fin + c.mesaDur) return 'mesa';
+  return 'sale';
+}
+function asignarMesas(clientes, semilla) {         // solo visual: quién se sienta a comer después de ser atendido
+  const azar = crearAleatorio(semilla + 4242), libreSilla = SILLAS.map(() => -1);
+  for (const c of [...clientes].sort((a, b) => a.fin - b.fin)) {
+    c.silla = null; c.lado = azar() < 0.5 ? 0 : 1;
+    if (azar() < 0.32 && SILLAS.length) {
+      const libres = SILLAS.map((_, i) => i).filter(i => libreSilla[i] <= c.fin);
+      if (libres.length) { const i = libres[Math.floor(azar() * libres.length)]; c.silla = i; c.mesaDur = 4 + azar() * 8; libreSilla[i] = c.fin + c.mesaDur + 0.8; }
+    }
+  }
+}
+function quitarMalla(id) { const m = mallas.get(id); if (m) { m.userData.aro.material.dispose(); grupoClientes.remove(m); mallas.delete(id); } }
+function limpiarMallas() { for (const id of [...mallas.keys()]) quitarMalla(id); }
+
+const _v = new THREE.Vector3();
+function anguloSuave(a, b, k) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; if (d < -Math.PI) d += Math.PI * 2; return a + d * k; }
+
+function actualizarPersonas(dt) {
+  const t = est.t, cl = est.cl;
+  let rango = 0;
+  for (const c of cl) {
+    const e = estadoCliente(c, t);
+    let objetivo = null, mirar = Math.PI, visible = true, sentado = false;
+    if (e === 'fila') {
+      const k = rango++;
+      if (k >= MAXVIS) visible = false; else objetivo = slotFila(k);
+      if (k > 8) mirar = Math.PI / 2;
+    } else if (e === 'atencion') { objetivo = PUESTO[c.empleado]; }
+    else if (e === 'mesa') { const s = SILLAS[c.silla]; objetivo = _v.set(s.x, 0, s.z).clone(); mirar = s.rot; sentado = true; }
+    else if (e === 'sale') { objetivo = c.silla != null ? SALIDA_MESA : SALIDA[c.empleado]; }
+    else visible = false;
+
+    let m = mallas.get(c.id);
+    if (!visible || (e === 'sale' && (!m || est.snap))) { if (m) quitarMalla(c.id); continue; }
+    if (!m) {
+      m = crearPersona(c.ropa); m.userData.cid = c.id;
+      const ini = est.snap ? objetivo : SPAWN[c.lado];
+      m.position.copy(ini); grupoClientes.add(m); mallas.set(c.id, m);
+    }
+    const u = m.userData;
+    u.aro.visible = e === 'fila' || e === 'atencion';
+    if (u.aro.visible) u.aro.material.color.copy(COLOR_ESTADO[e]);
+    const dx = objetivo.x - m.position.x, dz = objetivo.z - m.position.z, d = Math.hypot(dx, dz);
+    if (est.snap) { m.position.set(objetivo.x, 0, objetivo.z); m.rotation.y = mirar; }
+    let caminando = false;
+    if (!est.snap && d > 0.03) {
+      const paso = Math.max(2.5, d * 1.4) * dt;
+      if (paso >= d) m.position.set(objetivo.x, m.position.y, objetivo.z);
+      else { m.position.x += dx / d * paso; m.position.z += dz / d * paso; }
+      m.rotation.y = anguloSuave(m.rotation.y, Math.atan2(dx, dz), Math.min(1, dt * 10));
+      caminando = true; u.fase += dt * 11;
+    } else if (!est.snap) {
+      m.rotation.y = anguloSuave(m.rotation.y, mirar, Math.min(1, dt * 6));
+    }
+    if (e === 'sale' && d < 0.4) { quitarMalla(c.id); continue; }
+    const sentar = sentado && d < 0.05;
+    const sw = caminando ? Math.sin(u.fase) * 0.55 : 0;
+    u.piernas[0].rotation.x = sentar ? -1.45 : sw; u.piernas[1].rotation.x = sentar ? -1.45 : -sw;
+    u.brazos[0].rotation.x = sentar ? -0.6 : -sw * 0.8; u.brazos[1].rotation.x = sentar ? -0.6 : sw * 0.8;
+    m.position.y = sentar ? -0.13 : caminando ? Math.abs(Math.cos(u.fase)) * 0.04 : 0;
+  }
+  // quitar figuras de clientes que ya no existen en esta corrida
+  if (mallas.size) for (const id of mallas.keys()) if (id > cl.length) quitarMalla(id);
+}
+
+function actualizarEmpleados(dt) {
+  const t = est.t;
+  const ocup = [null, null];
+  for (const c of est.cl) if (c.inicio <= t && t < c.fin) ocup[c.empleado] = c;
+  ocup.forEach((c, i) => {
+    const e = empleados[i]; if (!e) return;
+    const u = e.userData;
+    if (c) {
+      u.fase += dt * 6;
+      u.brazos[0].rotation.x = -0.9 + Math.sin(u.fase) * 0.25; u.brazos[1].rotation.x = -0.9 + Math.sin(u.fase + 1.7) * 0.25;
+      u.cabeza.rotation.x = 0.18;
+      dibujarEtiqueta(etiquetas[i], 'E' + (i + 1), true, (t - c.inicio) / (c.fin - c.inicio), c.fin - t);
+    } else {
+      u.brazos[0].rotation.x *= 0.9; u.brazos[1].rotation.x *= 0.9; u.cabeza.rotation.x *= 0.9;
+      dibujarEtiqueta(etiquetas[i], 'E' + (i + 1), false, 0, 0);
+    }
+  });
+  return ocup;
+}
+
+// Tooltip al pasar sobre un cliente
+function configurarTooltip() {
+  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(), tip = $('tip');
+  let pend = null;
+  renderer.domElement.addEventListener('pointermove', ev => { pend = ev; });
+  renderer.domElement.addEventListener('pointerleave', () => { pend = null; tip.hidden = true; });
+  setInterval(() => {
+    if (!pend) return;
+    const ev = pend; pend = null;
+    const r = renderer.domElement.getBoundingClientRect();
+    ptr.set((ev.clientX - r.left) / r.width * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const hit = ray.intersectObjects(grupoClientes.children, true)[0];
+    let o = hit && hit.object; while (o && o.userData.cid == null) o = o.parent;
+    if (!o) { tip.hidden = true; return; }
+    const c = est.cl[o.userData.cid - 1]; if (!c) return;
+    const e = estadoCliente(c, est.t), ini = est.inicio;
+    let det;
+    if (e === 'fila') {
+      const pos = est.cl.filter(x => x.llegada <= est.t && est.t < x.inicio && x.llegada <= c.llegada).length;
+      det = `Esperando · puesto ${pos} en la fila<br>Lleva ${(est.t - c.llegada).toFixed(1)} min; esperará ${(c.inicio - c.llegada).toFixed(1)} min`;
+    } else if (e === 'atencion') det = `Lo atiende E${c.empleado + 1}<br>Esperó ${(c.inicio - c.llegada).toFixed(1)} min · atención ${(c.fin - c.inicio).toFixed(1)} min`;
+    else det = `Ya fue atendido por E${c.empleado + 1}<br>Esperó ${(c.inicio - c.llegada).toFixed(1)} min · total ${(c.fin - c.llegada).toFixed(1)} min`;
+    tip.innerHTML = `<strong>Cliente ${c.id}</strong>Llegó ${reloj(ini + c.llegada)}<br>${det}`;
+    tip.hidden = false;
+    const x = Math.min(ev.clientX - r.left + 14, r.width - tip.offsetWidth - 8), y = Math.max(8, ev.clientY - r.top - tip.offsetHeight - 10);
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  }, 60);
+}
+
+/* =====================================================================
+   7. INTERFAZ: panel de datos
+   ===================================================================== */
+const ui = {
+  lam: $('lam'), lamN: $('lamN'), mu: $('mu'), muN: $('muN'), tat: $('tat'),
+  dur: $('dur'), durN: $('durN'), rep: $('rep'), repN: $('repN'), sem: $('sem'), hIni: $('hIni'),
+};
+function pintarRango(r) { const p = (r.value - r.min) / (r.max - r.min) * 100; r.style.setProperty('--p', Math.max(0, Math.min(100, p)) + '%'); }
+function escribirCampos() {
+  ui.lam.value = est.lam; ui.lamN.value = +est.lam.toFixed(2);
+  ui.mu.value = est.mu; ui.muN.value = +est.mu.toFixed(2); ui.tat.value = +(60 / est.mu).toFixed(2);
+  ui.dur.value = Math.min(480, est.dur); ui.durN.value = est.dur;
+  ui.rep.value = Math.min(60, est.R); ui.repN.value = est.R; ui.sem.value = est.semilla;
+  ui.hIni.value = `${pad(Math.floor(est.inicio / 60) % 24)}:${pad(Math.round(est.inicio % 60))}`;
+  [ui.lam, ui.mu, ui.dur, ui.rep].forEach(pintarRango);
+}
+function marcarSucio() {
+  est.sucio = true; $('simular').classList.add('pendiente');
+  $('notaSim').textContent = est.lam < 2 * est.mu ? 'Cambiaste los datos. Pulsa Simular franja para ver el resultado.' : 'Con ρ ≥ 1 el modelo no tiene solución estable. Ajusta λ o μ para simular.';
+}
+function pasarALibre() {
+  if (est.esc !== 'libre') { est.esc = 'libre'; document.querySelector('input[name=esc][value=libre]').checked = true; }
+}
+function vistaPrevia() {
+  const th = teoria(est.lam, est.mu), rho = est.lam / (2 * est.mu);
+  $('lamAyuda').textContent = `Llega un cliente cada ${(60 / est.lam).toFixed(1)} min en promedio.`;
+  $('escLibreDato').textContent = est.esc === 'libre' ? `λ = ${+est.lam.toFixed(1)}/h` : '—';
+  const p = Math.min(1, rho);
+  const col = rho >= 1 || rho >= 0.9 ? 'var(--alert)' : rho >= 0.7 ? 'var(--pastry)' : 'var(--leaf)';
+  $('arcoVal').setAttribute('stroke-dasharray', `${(p * 100).toFixed(1)} 100`); $('arcoVal').style.stroke = col;
+  $('aguja').style.transform = `rotate(${Math.min(1.04, rho) * 180}deg)`;
+  $('rhoVal').textContent = (rho * 100).toFixed(1) + '%';
+  $('rhoTxt').textContent = rho >= 1 ? 'Inestable: la fila crece sin límite' : rho >= 0.9 ? 'Al límite: filas largas' : rho >= 0.7 ? 'Estable, pero muy congestionado' : 'Estable y holgado';
+  $('rhoTxt').style.color = col;
+  $('rhoAyuda').textContent = rho >= 1
+    ? `λ debe ser menor que 2μ = ${(2 * est.mu).toFixed(1)} clientes/h. Baja λ o sube μ.`
+    : 'ρ = λ / (2μ). Es la fracción del tiempo que los empleados pasan ocupados.';
+  $('pWq').textContent = th ? `${th.Wq.toFixed(1)} min` : '∞';
+  $('pLq').textContent = th ? th.Lq.toFixed(2) : '∞';
+  $('pPw').textContent = th ? `${Math.round(th.Pw * 100)}%` : '100%';
+  const btn = $('simular'); btn.disabled = !th;
+  if (!th) $('notaSim').textContent = 'Con ρ ≥ 1 el modelo no tiene solución estable. Ajusta λ o μ para simular.';
+  pintarFormulas(th);
+}
+function enlazar(rango, numero, aplicar) {
+  rango.addEventListener('input', () => { numero.value = rango.value; aplicar(+rango.value); pintarRango(rango); });
+  numero.addEventListener('input', () => { const v = parseFloat(numero.value); if (!Number.isFinite(v) || v <= 0) return; rango.value = v; aplicar(v); pintarRango(rango); });
+}
+enlazar(ui.lam, ui.lamN, v => { est.lam = v; pasarALibre(); vistaPrevia(); marcarSucio(); });
+enlazar(ui.mu, ui.muN, v => { est.mu = v; ui.tat.value = +(60 / v).toFixed(2); pasarALibre(); vistaPrevia(); marcarSucio(); });
+ui.tat.addEventListener('input', () => { const v = parseFloat(ui.tat.value); if (!(v > 0)) return; est.mu = 60 / v; ui.mu.value = est.mu; ui.muN.value = +est.mu.toFixed(2); pintarRango(ui.mu); pasarALibre(); vistaPrevia(); marcarSucio(); });
+enlazar(ui.dur, ui.durN, v => { est.dur = Math.round(v); marcarSucio(); });
+enlazar(ui.rep, ui.repN, v => { est.R = Math.max(1, Math.min(100, Math.round(v))); marcarSucio(); });
+ui.sem.addEventListener('input', () => { const v = parseInt(ui.sem.value, 10); if (v > 0) { est.semilla = v; marcarSucio(); } });
+$('otraSem').addEventListener('click', () => { est.semilla = 1 + Math.floor(Math.random() * 99999); ui.sem.value = est.semilla; simular(); });
+ui.hIni.addEventListener('input', () => {
+  const [h, m] = ui.hIni.value.split(':').map(Number); if (!Number.isFinite(h)) return;
+  est.inicio = h * 60 + (m || 0); cambiarLuz(luzPara(est.inicio)); actualizarHUD(); marcarSucio();
+});
+document.querySelectorAll('input[name=esc]').forEach(r => r.addEventListener('change', () => {
+  est.esc = r.value;
+  const s = ESCENARIOS[r.value];
+  if (s) { est.lam = s.lam; est.mu = 60 / s.tat; est.dur = s.dur; est.inicio = s.inicio; escribirCampos(); cambiarLuz(luzPara(est.inicio)); simular(); }
+  vistaPrevia();
+}));
+$('simular').addEventListener('click', simular);
+document.querySelectorAll('[data-vista]').forEach(b => b.addEventListener('click', () => irAVista(b.dataset.vista)));
+
+/* --- Reproductor --- */
+const barra = $('barra');
+function ponerJugando(v) {
+  est.jugando = v;
+  $('icoPausa').hidden = !v; $('icoPlay').hidden = v;
+  $('play').setAttribute('aria-label', v ? 'Pausar' : 'Reproducir');
+}
+$('play').addEventListener('click', () => {
+  if (!est.jugando && est.t >= est.tFin - 1e-6) { est.t = 0; est.snap = true; }
+  ponerJugando(!est.jugando);
+});
+barra.addEventListener('input', () => { est.t = +barra.value; est.snap = true; pintarRango(barra); });
+$('vel').addEventListener('change', e => { est.vel = +e.target.value; });
+
+/* =====================================================================
+   8. CORRER LA SIMULACIÓN Y MOSTRAR RESULTADOS
+   ===================================================================== */
+function simular() {
+  if (!(est.lam < 2 * est.mu)) return;
+  const res = correrReplicas(est.lam, est.mu, est.dur, est.R, est.semilla);
+  est.res = res;
+  est.cl = res.corridas[0].clientes;
+  est.cl.forEach(c => { c.ropa = ropaCliente(c.id, est.semilla); });
+  asignarMesas(est.cl, est.semilla);
+  est.med = res.corridas[0].m;
+  est.tFin = Math.max(est.dur, est.cl.length ? Math.max(...est.cl.map(c => c.fin)) : 0) + 0.5;
+  barra.max = est.tFin; est.t = 0; est.snap = true;
+  if (hay3D && grupoClientes) limpiarMallas();
+  ponerJugando(true);
+  est.sucio = false; $('simular').classList.remove('pendiente');
+  $('notaSim').textContent = `Listo: ${est.R} ${est.R === 1 ? 'réplica' : 'réplicas'} de ${est.dur} min. La escena reproduce la réplica 1 (${est.cl.length} clientes).`;
+  pintarResultados(); pintarGraficaFila(); pintarPn(); pintarConvergencia(); pintarTablaClientes();
+}
+
+function campoActual() {
+  if (est.esc === 'pico') return { nombre: 'Campo 7:00–8:00', m: MED_PICO };
+  if (est.esc === 'valle') return { nombre: 'Campo 4:40–5:20', m: { lam: MED_VALLE.lam, W: MED_VALLE.W, L: MED_VALLE.L } };
+  return null;
+}
+
+function pintarResultados() {
+  const th = teoria(est.lam, est.mu), s = est.res.resumen, campo = campoActual();
+  $('thCampo').textContent = campo ? campo.nombre : 'Campo';
+  $('resCorrida').textContent = `${est.R} ${est.R === 1 ? 'réplica' : 'réplicas'} de ${est.dur} min con λ = ${+est.lam.toFixed(2)} clientes/h y μ = ${est.mu.toFixed(2)} clientes/h por empleado. La simulación muestra el promedio ± la desviación entre réplicas.`;
+  const filas = [
+    ['lam', 'λ', 'Llegadas por hora', 'clientes/h', 1],
+    ['rho', 'ρ', 'Ocupación de los empleados', 'fracción del tiempo', 3],
+    ['P0', 'P0', 'Local vacío', 'probabilidad', 3],
+    ['Pw', 'Pw', 'Tener que esperar', 'probabilidad', 3],
+    ['Lq', 'Lq', 'Clientes en la fila', 'promedio', 2],
+    ['L', 'L', 'Clientes en el local', 'promedio', 2],
+    ['Wq', 'Wq', 'Espera en la fila', 'minutos', 2],
+    ['W', 'W', 'Tiempo total en el local', 'minutos', 2],
+  ];
+  $('tbComp').innerHTML = filas.map(([k, sym, nom, uni, d]) => {
+    const sm = s[k], tv = th ? (k === 'lam' ? est.lam : th[k]) : NaN, cv = campo && campo.m[k] != null ? campo.m[k] : NaN;
+    const pm = est.R > 1 ? ` <span class="pm">± ${fmt(sm.sd, d)}</span>` : '';
+    return `<tr><td><span class="sym">${sym}</span>${nom}<small>${uni}</small></td><td class="sim">${fmt(sm.m, d)}${pm}</td><td>${fmt(tv, d)}</td><td>${campo ? fmt(cv, d) : '—'}</td></tr>`;
+  }).join('');
+
+  const h = [];
+  if (th) {
+    const r = s.Wq.m / th.Wq;
+    if (r < 0.85) h.push(`<p><b>La franja es corta para el estado estable</b>La simulación de ${est.dur} min da una espera de ${s.Wq.m.toFixed(1)} min y la teoría ${th.Wq.toFixed(1)} min. Cada franja empieza con el local vacío y la fila tarda en crecer, así que el promedio queda por debajo. La gráfica de convergencia muestra cómo se acercan con franjas más largas.</p>`);
+    else if (r > 1.15) h.push(`<p><b>Esta corrida salió más congestionada</b>La espera simulada (${s.Wq.m.toFixed(1)} min) supera la teórica (${th.Wq.toFixed(1)} min). Con ρ cercano a 1 las réplicas varían mucho; prueba con más réplicas u otra semilla.</p>`);
+    else h.push(`<p><b>Simulación y teoría coinciden</b>La espera simulada (${s.Wq.m.toFixed(1)} min) está cerca de la teórica (${th.Wq.toFixed(1)} min). Con franjas largas y varias réplicas, la simulación reproduce el modelo M/M/2.</p>`);
+    h.push(`<p><b>Ocupación de ${(th.rho * 100).toFixed(1)}%</b>Los dos empleados pasan ocupados ${(th.rho * 100).toFixed(0)} de cada 100 minutos. ${th.rho >= 0.8 ? 'Con una ocupación así, pequeñas rachas de clientes forman filas largas.' : 'Hay holgura: casi siempre hay un empleado libre.'} A ${(th.Pw * 100).toFixed(0)}% de los clientes les toca esperar.</p>`);
+  }
+  if (est.esc === 'pico') h.push(`<p><b>El campo dio menos espera</b>En la observación la espera fue ${MED_PICO.Wq.toFixed(1)} min en promedio. Los tiempos de atención medidos van de 2 a 5 min, mucho menos variables que la exponencial que supone el modelo, y la fila se vació después de las 7:33. Por eso el campo queda por debajo de la teoría.</p>`);
+  if (est.esc === 'valle') h.push(`<p><b>En la tarde casi nadie espera</b>En el campo el tiempo total promedio fue ${MED_VALLE.W.toFixed(2)} min, cerca del tiempo de atención. Con ρ = ${th ? th.rho.toFixed(3) : '—'} los dos empleados tienen tiempo de sobra.</p>`);
+  $('hallazgos').innerHTML = h.join('');
+}
+
+/* --- Gráficas (SVG) --- */
+const NS = 'http://www.w3.org/2000/svg';
+function ejes(W, H, m, xMax, yMax, xTicks, yTicks, xLbl) {
+  let s = '';
+  yTicks.forEach(v => { const y = H - m.b - (H - m.t - m.b) * v / yMax; s += `<line class="g-eje" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="g-txt" x="${m.l - 8}" y="${y + 4}" text-anchor="end">${v}</text>`; });
+  xTicks.forEach(v => { const x = m.l + (W - m.l - m.r) * v / xMax; s += `<text class="g-txt" x="${x}" y="${H - m.b + 18}" text-anchor="middle">${xLbl(v)}</text>`; });
+  return s;
+}
+function ticksY(max) { const paso = max <= 5 ? 1 : max <= 12 ? 2 : max <= 30 ? 5 : 10; const a = [0]; while (a[a.length - 1] < max - 1e-9) a.push(+(a[a.length - 1] + paso).toFixed(2)); return a; }
+let filaGeom = null;
+function pintarGraficaFila() {
+  const W = 640, H = 240, m = { l: 40, r: 14, t: 14, b: 30 }, th = teoria(est.lam, est.mu);
+  const serie = est.med.serie, campo = est.esc === 'pico' && est.dur === 60 ? MED_PICO.serie : null;
+  const xMax = est.tFin, qMax = Math.max(3, ...serie.map(p => p.q), campo ? Math.max(...campo.map(p => p.q)) : 0, th ? Math.ceil(th.Lq) : 0);
+  const yTk = ticksY(qMax), yMax = yTk[yTk.length - 1];
+  const X = t => m.l + (W - m.l - m.r) * t / xMax, Y = v => H - m.b - (H - m.t - m.b) * v / yMax;
+  const paso = xMax <= 60 ? 10 : xMax <= 150 ? 30 : xMax <= 480 ? 60 : 120, xTk = []; for (let v = 0; v <= xMax; v += paso) xTk.push(v);
+  const escal = pts => { let d = `M${X(0)},${Y(0)}`, qa = 0; for (const p of pts) { d += `L${X(p.t)},${Y(qa)}L${X(p.t)},${Y(p.q)}`; qa = p.q; } return { d, qa }; };
+  const a = escal(serie);
+  let s = ejes(W, H, m, xMax, yMax, xTk, yTk, v => reloj(est.inicio + v).replace(/ [ap]\. m\./, ''));
+  s += `<path class="g-fila" d="${a.d}L${X(xMax)},${Y(a.qa)}L${X(xMax)},${Y(0)}Z"/>`;
+  if (campo) s += `<path class="g-campo" d="${escal(campo).d}L${X(60)},${Y(0)}"/>`;
+  if (th) s += `<line class="g-teo" x1="${m.l}" x2="${W - m.r}" y1="${Y(th.Lq)}" y2="${Y(th.Lq)}"/><text class="g-txt-ink" x="${W - m.r}" y="${Y(th.Lq) - 6}" text-anchor="end">Lq teoría ${th.Lq.toFixed(2)}</text>`;
+  s += `<line class="g-cursor" id="cursorFila" x1="${m.l}" x2="${m.l}" y1="${m.t}" y2="${H - m.b}"/>`;
+  $('gFila').innerHTML = s;
+  filaGeom = { X };
+  $('leyFila').innerHTML = `<span><i class="sw fila"></i>Personas en la fila (simulación)</span><span><i class="sw teo"></i>Lq teórica</span>${campo ? '<span><i class="sw campo"></i>Tu observación de campo</span>' : ''}`;
+}
+function pintarPn() {
+  const W = 640, H = 240, m = { l: 40, r: 14, t: 14, b: 30 }, th = teoria(est.lam, est.mu), N = 10;
+  const sim = Array.from({ length: N }, (_, n) => n < N - 1 ? est.res.resumen.Pn[n] : est.res.resumen.Pn.slice(n).reduce((a, b) => a + b, 0));
+  const teo = th ? Array.from({ length: N }, (_, n) => n < N - 1 ? th.Pn(n) : 1 - Array.from({ length: N - 1 }, (_, k) => th.Pn(k)).reduce((a, b) => a + b, 0)) : [];
+  const campo = est.esc === 'pico' ? Array.from({ length: N }, (_, n) => n < N - 1 ? MED_PICO.Pn[n] : MED_PICO.Pn.slice(n).reduce((a, b) => a + b, 0)) : null;
+  const max = Math.max(...sim, ...teo, ...(campo || [0])), pasoY = max > 0.35 ? 0.1 : 0.05;
+  const yTk = [0]; while (yTk[yTk.length - 1] < max - 1e-9) yTk.push(+(yTk[yTk.length - 1] + pasoY).toFixed(2));
+  const top = yTk[yTk.length - 1];
+  const bw = (W - m.l - m.r) / N, Y = v => H - m.b - (H - m.t - m.b) * v / top;
+  let s = ''; yTk.forEach(v => { s += `<line class="g-eje" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="g-txt" x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`; });
+  for (let n = 0; n < N; n++) {
+    const x0 = m.l + n * bw;
+    s += `<rect class="g-bar-sim" x="${x0 + bw * 0.14}" y="${Y(sim[n])}" width="${bw * 0.36}" height="${Y(0) - Y(sim[n])}" rx="2"/>`;
+    if (th) s += `<rect class="g-bar-teo" x="${x0 + bw * 0.52}" y="${Y(teo[n])}" width="${bw * 0.34}" height="${Math.max(0, Y(0) - Y(teo[n]))}" rx="2"/>`;
+    if (campo) s += `<circle class="g-pto" cx="${x0 + bw * 0.5}" cy="${Y(campo[n])}" r="4.5"/>`;
+    s += `<text class="g-txt" x="${x0 + bw / 2}" y="${H - m.b + 18}" text-anchor="middle">${n < N - 1 ? n : (N - 1) + '+'}</text>`;
+  }
+  $('gPn').innerHTML = s;
+  $('leyPn').innerHTML = `<span><i class="sw fila" style="background:var(--pastry)"></i>Simulación</span><span><i class="sw box"></i>Teoría (Pn = 2ρⁿP0)</span>${campo ? '<span><i class="sw pt"></i>Campo</span>' : ''}`;
+}
+function pintarConvergencia() {
+  const th = teoria(est.lam, est.mu); if (!th) return;
+  const durs = [30, 60, 120, 240, 480, 960, 1920], R = Math.min(Math.max(est.R, 10), 30);
+  const vals = durs.map(d => { let s = 0; for (let k = 0; k < R; k++) s += medir(simularFranja(est.lam, est.mu, d, est.semilla + 500 + k), d).Wq; return s / R; });
+  const W = 900, H = 250, m = { l: 44, r: 20, t: 20, b: 34 };
+  const campo = est.esc === 'pico' ? MED_PICO.Wq : null;
+  const yMax0 = Math.max(th.Wq, ...vals, campo || 0) * 1.15, yTk = ticksY(yMax0), yMax = yTk[yTk.length - 1];
+  const X = i => m.l + (W - m.l - m.r) * (i + 0.5) / durs.length, Y = v => H - m.b - (H - m.t - m.b) * v / yMax;
+  let s = ''; yTk.forEach(v => { s += `<line class="g-eje" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="g-txt" x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`; });
+  durs.forEach((d, i) => { s += `<text class="g-txt" x="${X(i)}" y="${H - m.b + 20}" text-anchor="middle">${d < 60 ? d + ' min' : (d / 60) + ' h'}</text>`; });
+  s += `<line class="g-teo" x1="${m.l}" x2="${W - m.r}" y1="${Y(th.Wq)}" y2="${Y(th.Wq)}"/><text class="g-txt-ink" x="${W - m.r}" y="${Y(th.Wq) - 7}" text-anchor="end">Wq teoría ${th.Wq.toFixed(2)} min</text>`;
+  s += `<path class="g-linea" d="${vals.map((v, i) => (i ? 'L' : 'M') + X(i) + ',' + Y(v)).join('')}"/>`;
+  vals.forEach((v, i) => { const arriba = v < th.Wq * 0.8; s += `<circle class="g-pto-sim" cx="${X(i)}" cy="${Y(v)}" r="5.5"/><text class="g-txt-ink" x="${X(i)}" y="${arriba ? Y(v) - 12 : Y(v) + 20}" text-anchor="middle">${v.toFixed(1)}</text>`; });
+  if (campo != null) s += `<circle class="g-pto" cx="${X(1)}" cy="${Y(campo)}" r="6"/><text class="g-txt" x="${X(1) + 12}" y="${Y(campo) + 4}">campo ${campo.toFixed(2)}</text>`;
+  $('gConv').innerHTML = s;
+  $('leyConv').innerHTML = `<span><i class="sw fila" style="background:var(--pastry)"></i>Espera simulada Wq (promedio de ${R} réplicas por duración)</span><span><i class="sw teo"></i>Wq teórica</span>${campo != null ? '<span><i class="sw pt"></i>Observado en la franja de 1 h</span>' : ''}`;
+}
+
+function pintarFormulas(th) {
+  const lam = est.lam, mu = est.mu, rho = lam / (2 * mu);
+  const fr = (a, b) => `<span class="frac"><span>${a}</span><span>${b}</span></span>`;
+  const card = (nom, eq, sus, res) => `<div class="f"><div class="nom">${nom}</div><div class="eq">${eq}</div><div class="sus">${sus}</div><div class="res">${res}</div></div>`;
+  if (!th) {
+    $('formulas').innerHTML = card('Ocupación de los empleados', `ρ = ${fr('λ', '2μ')}`, `= ${fr(lam.toFixed(2), '2 · ' + mu.toFixed(2))}`, `ρ = ${rho.toFixed(3)} ≥ 1: no hay estado estable`);
+    return;
+  }
+  const r3 = v => v.toFixed(3), r4 = v => v.toFixed(4);
+  $('formulas').innerHTML = [
+    card('Ocupación de los empleados', `ρ = ${fr('λ', '2μ')}`, `= ${fr(lam.toFixed(2), '2 · ' + mu.toFixed(2))}`, `ρ = ${r3(rho)}`),
+    card('Probabilidad de local vacío', `P0 = ${fr('1 − ρ', '1 + ρ')}`, `= ${fr('1 − ' + r3(rho), '1 + ' + r3(rho))}`, `P0 = ${r4(th.P0)}`),
+    card('Clientes en la fila', `Lq = ${fr('2ρ³', '1 − ρ²')}`, `= ${fr('2 · ' + r3(rho) + '³', '1 − ' + r3(rho) + '²')}`, `Lq = ${r3(th.Lq)} clientes`),
+    card('Espera en la fila', `Wq = ${fr('Lq', 'λ')}`, `= ${fr(r3(th.Lq), lam.toFixed(2))} h · 60`, `Wq = ${th.Wq.toFixed(2)} min`),
+    card('Tiempo total en el local', `W = Wq + ${fr('1', 'μ')}`, `= ${th.Wq.toFixed(2)} + ${(60 / mu).toFixed(2)} min`, `W = ${th.W.toFixed(2)} min`),
+    card('Clientes en el local (Little)', `L = λ · W`, `= ${lam.toFixed(2)} · ${fr(th.W.toFixed(2), '60')}`, `L = ${r3(th.L)} clientes`),
+    card('Probabilidad de esperar', `Pw = ${fr('2ρ²', '1 + ρ')}`, `= ${fr('2 · ' + r3(rho) + '²', '1 + ' + r3(rho))}`, `Pw = ${r3(th.Pw)}`),
+    card('Probabilidad de n clientes', `Pn = 2ρⁿ · P0 (n ≥ 1)`, `P1 = ${r4(th.Pn(1))} · P2 = ${r4(th.Pn(2))} · P3 = ${r4(th.Pn(3))}`, `P(n ≥ 2) = ${r3(1 - th.Pn(0) - th.Pn(1))}`),
+  ].join('');
+}
+
+function pintarTablaClientes() {
+  const ini = est.inicio, LIM = 400, cl = est.cl;
+  $('clTxt').textContent = `${cl.length} clientes en la réplica 1${cl.length > LIM ? ` (se muestran los primeros ${LIM})` : ''}. Mismas columnas que la tabla de observación de campo. Las filas se resaltan mientras el cliente está en la fila (dorado) o siendo atendido (verde).`;
+  $('tbCl').innerHTML = cl.slice(0, LIM).map(c => `<tr data-i="${c.id - 1}"><td>${c.id}</td><td>${reloj(ini + c.llegada, true)}</td><td class="emp">E${c.empleado + 1}</td><td>${reloj(ini + c.inicio, true)}</td><td>${reloj(ini + c.fin, true)}</td><td>${(c.fin - c.inicio).toFixed(2)}</td><td>${(c.inicio - c.llegada).toFixed(2)}</td><td>${(c.fin - c.llegada).toFixed(2)}</td><td>${c.silla != null ? 'Se sienta' : 'Para llevar'}</td></tr>`).join('');
+}
+function resaltarTabla() {
+  const t = est.t;
+  for (const tr of $('tbCl').children) {
+    const c = est.cl[+tr.dataset.i]; if (!c) continue;
+    const cls = c.llegada <= t && t < c.inicio ? 'fila' : c.inicio <= t && t < c.fin ? 'at' : '';
+    if (tr.className !== cls) tr.className = cls;
+  }
+}
+setInterval(() => { if (est.cl.length) resaltarTabla(); }, 300);
+
+/* =====================================================================
+   9. BUCLE DE ANIMACIÓN
+   ===================================================================== */
+function actualizarHUD(ocup) {
+  const t = est.t;
+  $('hFranja').textContent = est.esc === 'libre' ? 'Tus valores' : ESCENARIOS[est.esc].nombre;
+  $('hReloj').textContent = reloj(est.inicio + t);
+  $('hMin').textContent = t <= est.dur ? `minuto ${t.toFixed(1)} de ${est.dur}` : `franja cerrada · terminan de atender`;
+  let fila = 0, at = 0; const oc = ocup || [null, null];
+  for (const c of est.cl) { if (c.llegada > t) break; if (t < c.inicio) fila++; if (c.fin <= t) at++; }
+  if (!ocup) for (const c of est.cl) if (c.inicio <= t && t < c.fin) oc[c.empleado] = c;
+  $('cFila').textContent = fila; $('cAt').textContent = at;
+  [0, 1].forEach(i => { $('cE' + (i + 1)).textContent = oc[i] ? 'ocupado' : 'libre'; $('dE' + (i + 1)).className = 'dot ' + (oc[i] ? 'at' : 'off'); });
+  $('tTxt').textContent = `${t.toFixed(1)} / ${est.tFin.toFixed(0)} min`;
+  if (document.activeElement !== barra) { barra.value = t; pintarRango(barra); }
+  const cur = document.getElementById('cursorFila');
+  if (cur && filaGeom) { const x = filaGeom.X(Math.min(t, est.tFin)); cur.setAttribute('x1', x); cur.setAttribute('x2', x); }
+}
+
+let ultimo = performance.now(), hudCont = 0;
+function bucle(ahora) {
+  const dt = Math.min(0.1, (ahora - ultimo) / 1000); ultimo = ahora;
+  if (est.jugando && est.cl.length) {
+    est.t = Math.min(est.tFin, est.t + dt * est.vel);
+    if (est.t >= est.tFin) ponerJugando(false);
+  }
+  let ocup = null;
+  if (hay3D && scene) try {
+    mezclarLuz();
+    if (camAnim) {
+      const u = Math.min(1, (ahora - camAnim.t0) / camAnim.dur), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+      camera.position.lerpVectors(camAnim.p0, camAnim.p1, e); controls.target.lerpVectors(camAnim.o0, camAnim.o1, e);
+      if (u >= 1) camAnim = null;
+    }
+    controls.update();
+    actualizarPersonas(dt);
+    ocup = actualizarEmpleados(dt);
+    renderer.render(scene, camera);
+  } catch (err) { console.error(err); }   // un error de dibujo no detiene la reproducción
+  est.snap = false;
+  if (++hudCont % 3 === 0 || !est.jugando) actualizarHUD(ocup);
+  requestAnimationFrame(bucle);
+}
+
+/* =====================================================================
+   10. ARRANQUE: la página abre con la hora pico corriendo
+   ===================================================================== */
+escribirCampos();
+vistaPrevia();
+simular();
+actualizarHUD();
+iniciar3D().then(() => { est.snap = true; }).catch(err => { console.error(err); hay3D = false; $('sin3d').hidden = false; });
+requestAnimationFrame(t => { ultimo = t; bucle(t); });
+</script>
+
+</body>
+</html>
